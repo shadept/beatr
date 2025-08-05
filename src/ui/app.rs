@@ -284,33 +284,36 @@ impl eframe::App for DrumComposerApp {
                     });
                 });
 
-            ui.add_space(8.0);
+            ui.add_space(6.0);
 
             if let Some(ref error) = self.error_message {
                 egui::Frame::none()
                     .fill(egui::Color32::from_rgb(60, 20, 20))
                     .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(120, 40, 40)))
-                    .inner_margin(egui::Margin::same(12.0))
+                    .inner_margin(egui::Margin::same(8.0))
                     .show(ui, |ui| {
                         ui.colored_label(egui::Color32::from_rgb(255, 100, 100),
                                        format!("⚠ Error: {}", error));
                     });
-                ui.add_space(8.0);
+                ui.add_space(6.0);
                 return;
             }
 
             if let Some(ref _audio_engine) = self.audio_engine {
 
-                // Transport controls in a dedicated panel
+                // Flattened transport controls - minimal nesting for better alignment
                 egui::Frame::none()
                     .fill(egui::Color32::from_gray(30))
                     .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(50)))
-                    .inner_margin(egui::Margin::symmetric(16.0, 12.0))
+                    .inner_margin(egui::Margin::same(12.0))
+                    .rounding(4.0)
                     .show(ui, |ui| {
+                        // Single horizontal layout - all controls in one line
                         ui.horizontal(|ui| {
+                            // Transport controls - direct placement, no groups
                             ui.label("Transport:");
-                            ui.add_space(8.0);
-
+                            ui.add_space(6.0);
+                            
                             // Check if timeline has segments to determine playback mode
                             let has_timeline_segments = {
                                 if let Ok(timeline) = self.timeline.lock() {
@@ -321,7 +324,7 @@ impl eframe::App for DrumComposerApp {
                             };
 
                             if has_timeline_segments {
-                                // Timeline transport controls
+                                // Timeline transport controls - direct buttons
                                 let (is_timeline_playing, timeline_position) = {
                                     if let Ok(timeline) = self.timeline.lock() {
                                         (timeline.is_playing(), timeline.current_position)
@@ -330,57 +333,47 @@ impl eframe::App for DrumComposerApp {
                                     }
                                 };
 
-                                if ui.button(if is_timeline_playing { "⏸ Pause" } else { "▶ Play Timeline" }).clicked() {
+                                if ui.button(if is_timeline_playing { "⏸" } else { "▶" }).clicked() {
                                     if let Ok(mut timeline) = self.timeline.lock() {
                                         if is_timeline_playing {
                                             timeline.pause();
                                         } else {
                                             timeline.play();
                                         }
-                                        // Playback state changes don't mark project as modified
                                     }
                                 }
 
-                                if ui.button("⏹ Stop").clicked() {
+                                if ui.button("⏹").clicked() {
                                     if let Ok(mut timeline) = self.timeline.lock() {
                                         timeline.stop();
-                                        // Playback state changes don't mark project as modified
                                     }
                                 }
 
-                                // Show timeline position
-                                ui.label(format!("Position: {:.1}s", timeline_position));
+                                ui.label(format!("{:.1}s", timeline_position));
                             } else {
-                                // Regular sequencer transport controls
-                                if TransportControls::show(ui, &self.timeline) {
-                                    // Transport state changed
-                                }
+                                TransportControls::show(ui, &self.timeline);
                             }
-
-                            ui.separator();
-                            ui.add_space(8.0);
-
-                            ui.label("Default Tempo:");
-                            ui.add_space(4.0);
-
-                            let tempo_changed = TempoControl::show(ui, &mut self.tempo);
                             
+                            ui.separator();
+                            
+                            // Tempo controls - direct placement
+                            let tempo_changed = TempoControl::show(ui, &mut self.tempo);
                             if tempo_changed {
-                                // Show option to apply to all segments
                                 ui.add_space(4.0);
-                                if ui.button("Apply to All Segments").clicked() {
+                                if ui.small_button("Apply All").clicked() {
                                     if let Ok(mut timeline) = self.timeline.lock() {
                                         timeline.set_global_bpm(self.tempo);
                                     }
                                     self.project_modified = true;
                                 }
                             }
-
+                            
                             ui.separator();
-                            ui.add_space(8.0);
-
-                            ui.label("Loop: Timeline Segments");
-                            ui.separator();
+                            
+                            // Time signature controls - direct placement
+                            ui.label("Time Sig:");
+                            ui.add_space(4.0);
+                            
                             let selected_segment_id = if let Some(ref timeline_view) = self.timeline_view {
                                 timeline_view.get_selected_segment_id()
                             } else {
@@ -399,15 +392,14 @@ impl eframe::App for DrumComposerApp {
                                 self.project_modified = true;
                             }
                             
-                            ui.add_space(4.0);
-                            // Status indicators on the right
+                            // Status on the right - direct placement
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label("🎼 Timeline Mode");
+                                ui.label("🎼");
                             });
                         });
                     });
 
-                ui.add_space(12.0);
+                ui.add_space(6.0);
 
                 // Timeline view first - this updates sequencer patterns based on selection
                 let mut timeline_modified = false;
@@ -415,18 +407,23 @@ impl eframe::App for DrumComposerApp {
                     egui::Frame::none()
                         .fill(egui::Color32::from_gray(30))
                         .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(50)))
-                        .inner_margin(egui::Margin::symmetric(12.0, 8.0))
+                        .inner_margin(egui::Margin::same(12.0))
+                        .rounding(4.0)
                         .show(ui, |ui| {
+                            // Flattened timeline header - no nested horizontal layout
                             ui.horizontal(|ui| {
                                 ui.heading("Timeline");
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if let Ok(timeline) = self.timeline.lock() {
-                                        let duration = timeline.total_duration();
+                                ui.add_space(12.0);
+                                
+                                // Duration display directly in the same horizontal line
+                                if let Ok(timeline) = self.timeline.lock() {
+                                    let duration = timeline.total_duration();
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                         ui.label(format!("Duration: {:.1}s", duration));
-                                    }
-                                });
+                                    });
+                                }
                             });
-                            ui.add_space(4.0);
+                            ui.add_space(6.0);
                             timeline_view.show(ui, &self.timeline, self.tempo);
                             timeline_modified = true; // Assume timeline was modified
                         });
@@ -437,7 +434,7 @@ impl eframe::App for DrumComposerApp {
                     self.sync_audio_timeline_to_project();
                 }
 
-                ui.add_space(12.0);
+                ui.add_space(6.0);
 
                 // Pattern grid with improved container - shown after timeline view updates sequencer
                 let selected_segment_name = if let Some(ref timeline_view) = self.timeline_view {
@@ -458,11 +455,17 @@ impl eframe::App for DrumComposerApp {
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
                         if let Some(ref segment_name) = selected_segment_name {
-                            ui.horizontal(|ui| {
-                                ui.label("Editing timeline segment:");
-                                ui.colored_label(egui::Color32::from_rgb(100, 140, 220), segment_name);
-                            });
-                            ui.add_space(4.0);
+                            egui::Frame::none()
+                                .fill(egui::Color32::from_gray(35))
+                                .inner_margin(egui::Margin::same(8.0))
+                                .rounding(4.0)
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label("📝 Editing timeline segment:");
+                                        ui.strong(egui::RichText::new(segment_name).color(egui::Color32::from_rgb(100, 140, 220)));
+                                    });
+                                });
+                            ui.add_space(6.0);
                         }
                         let selected_segment_id = if let Some(ref timeline_view) = self.timeline_view {
                             timeline_view.get_selected_segment_id()
@@ -474,15 +477,17 @@ impl eframe::App for DrumComposerApp {
 
                 // No sync needed - patterns are stored directly in timeline segments
 
-                ui.add_space(8.0);
+                ui.add_space(6.0);
 
                 // Footer with help text
                 egui::Frame::none()
                     .fill(egui::Color32::from_gray(20))
-                    .inner_margin(egui::Margin::symmetric(16.0, 8.0))
+                    .inner_margin(egui::Margin::same(8.0))
+                    .rounding(4.0)
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            ui.small("💡 Click step buttons to create patterns • Numbers show measure positions • Clear to reset tracks");
+                            ui.small(egui::RichText::new("💡 Tip: Click step buttons to create patterns • Numbers show measure positions • Clear to reset tracks")
+                                .color(egui::Color32::from_gray(180)));
                         });
                     });
             } else {
@@ -510,6 +515,77 @@ impl eframe::App for DrumComposerApp {
             if let Ok(mut timeline) = audio_engine.timeline().try_lock() {
                 timeline.stop();
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_responsive_layout_width_thresholds() {
+        // Test that responsive layout properly detects narrow vs wide layouts
+        const NARROW_THRESHOLD: f32 = 800.0;
+        
+        // These widths should trigger narrow layout
+        let narrow_widths = [600.0, 700.0, 799.0];
+        for width in narrow_widths {
+            assert!(width < NARROW_THRESHOLD, "Width {} should be considered narrow", width);
+        }
+        
+        // These widths should trigger wide layout
+        let wide_widths = [800.0, 900.0, 1200.0, 1920.0];
+        for width in wide_widths {
+            assert!(width >= NARROW_THRESHOLD, "Width {} should be considered wide", width);
+        }
+    }
+    
+    #[test]
+    fn test_window_title_generation() {
+        // Test window title generation with mock app state
+        let mut app = create_test_app();
+        
+        // Test clean project title
+        let title = app.get_window_title();
+        assert_eq!(title, "Beatr - New Project");
+        
+        // Test modified project title
+        app.project_modified = true;
+        let title = app.get_window_title();
+        assert_eq!(title, "Beatr - New Project*");
+    }
+    
+    #[test]
+    fn test_project_state_management() {
+        let mut app = create_test_app();
+        
+        // Initially not modified
+        assert!(!app.project_modified);
+        
+        // Creating a new project should reset modified state
+        app.project_modified = true;
+        app.new_project();
+        assert!(!app.project_modified);
+        assert_eq!(app.current_project.metadata.name, "New Project");
+        assert_eq!(app.tempo, app.current_project.global_bpm);
+    }
+    
+    // Helper function to create a test app without UI dependencies
+    fn create_test_app() -> DrumComposerApp {
+        DrumComposerApp {
+            audio_engine: None,
+            error_message: None,
+            tempo: 120.0,
+            custom_loop_length_text: "16".to_string(),
+            custom_time_sig_numerator: "4".to_string(),
+            custom_time_sig_denominator: "4".to_string(),
+            time_sig_validation_error: None,
+            timeline: Arc::new(Mutex::new(Timeline::new())),
+            timeline_view: None,
+            current_project: Project::new("New Project".to_string()),
+            current_project_path: None,
+            project_modified: false,
         }
     }
 }

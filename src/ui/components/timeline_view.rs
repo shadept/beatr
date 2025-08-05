@@ -30,26 +30,29 @@ impl TimelineView {
     pub fn show(&mut self, ui: &mut egui::Ui, timeline: &Arc<Mutex<Timeline>>, global_bpm: f32) -> bool {
         let mut changed = false;
 
-        // Timeline controls bar
+        // Flattened timeline controls - single horizontal layout like transport controls
         ui.horizontal(|ui| {
-            // Zoom controls
-            if ui.button("−").clicked() {
+            // Zoom controls - direct placement, no groups
+            if ui.small_button("−").clicked() {
                 self.zoom_level = (self.zoom_level * 0.8).max(10.0);
             }
             ui.label(format!("Zoom: {:.0}px/s", self.zoom_level));
-            if ui.button("+").clicked() {
+            if ui.small_button("+").clicked() {
                 self.zoom_level = (self.zoom_level * 1.25).min(200.0);
             }
-
+            
             ui.separator();
 
-            // Timeline controls
+            // Add Segment button - direct placement
             if ui.button("Add Segment").clicked() {
                 self.add_segment_at_position(0.0, global_bpm);
                 changed = true;
             }
 
+            // Segment controls if selected - direct placement
             if let Some(selected_id) = self.selected_segment.clone() {
+                ui.separator();
+                
                 if ui.button("Duplicate").clicked() {
                     self.duplicate_selected_segment();
                     changed = true;
@@ -63,9 +66,7 @@ impl TimelineView {
                     changed = true;
                 }
 
-                ui.separator();
-
-                // Loop count adjustment
+                // Loop count controls if selected - direct placement
                 let current_loop_count = {
                     if let Ok(timeline) = self.timeline.lock() {
                         timeline.get_segment(&selected_id).map(|s| s.loop_count)
@@ -75,121 +76,128 @@ impl TimelineView {
                 };
 
                 if let Some(loop_count) = current_loop_count {
+                    ui.separator();
+                    
                     ui.label(format!("Loops: {}", loop_count));
-                    if ui.button("−").clicked() && loop_count > 1 {
+                    if ui.small_button("−").clicked() && loop_count > 1 {
                         self.adjust_segment_loop_count(&selected_id, loop_count - 1);
                         changed = true;
                     }
-                    if ui.button("+").clicked() {
+                    if ui.small_button("+").clicked() {
                         self.adjust_segment_loop_count(&selected_id, loop_count + 1);
                         changed = true;
                     }
+                }
 
+                // BPM controls if selected - direct placement
+                let current_bpm = {
+                    if let Ok(timeline) = self.timeline.lock() {
+                        timeline.get_segment(&selected_id).map(|s| s.bpm)
+                    } else {
+                        None
+                    }
+                };
+
+                if let Some(mut bpm) = current_bpm {
                     ui.separator();
-
-                    // Segment BPM adjustment
-                    let current_bpm = {
-                        if let Ok(timeline) = self.timeline.lock() {
-                            timeline.get_segment(&selected_id).map(|s| s.bpm)
-                        } else {
-                            None
-                        }
-                    };
-
-                    if let Some(mut bpm) = current_bpm {
-                        ui.horizontal(|ui| {
-                            ui.label("BPM:");
-                            if ui.add(egui::DragValue::new(&mut bpm)
-                                .range(60.0..=300.0)
-                                .speed(1.0)
-                                .suffix(" BPM"))
-                                .changed() 
-                            {
-                                self.adjust_segment_bpm(&selected_id, bpm);
-                                changed = true;
-                            }
-                            
-                            // Quick BPM preset buttons
-                            if ui.button("120").clicked() {
-                                self.adjust_segment_bpm(&selected_id, 120.0);
-                                changed = true;
-                            }
-                            if ui.button("140").clicked() {
-                                self.adjust_segment_bpm(&selected_id, 140.0);
-                                changed = true;
-                            }
-                        });
+                    
+                    ui.label("BPM:");
+                    if ui.add(egui::DragValue::new(&mut bpm)
+                        .range(60.0..=300.0)
+                        .speed(1.0)
+                        .prefix("♩ ")
+                        .suffix(" BPM")
+                        .min_decimals(0)
+                        .max_decimals(0))
+                        .changed() 
+                    {
+                        self.adjust_segment_bpm(&selected_id, bpm);
+                        changed = true;
                     }
-
-                    // Segment Time Signature adjustment
-                    let current_time_signature = {
-                        if let Ok(timeline) = self.timeline.lock() {
-                            timeline.get_segment(&selected_id).map(|s| s.time_signature)
-                        } else {
-                            None
-                        }
-                    };
-                    if let Some(time_sig) = current_time_signature {
-                        ui.horizontal(|ui| {
-                            ui.label("Time Sig:");
-                            
-                            // Quick time signature preset buttons
-                            let presets = [
-                                ("4/4", crate::audio::TimeSignature::four_four()),
-                                ("3/4", crate::audio::TimeSignature::three_four()),
-                                ("5/4", crate::audio::TimeSignature::five_four()),
-                                ("6/8", crate::audio::TimeSignature::six_eight()),
-                                ("7/8", crate::audio::TimeSignature::seven_eight()),
-                            ];
-                            
-                            for (label, preset_ts) in &presets {
-                                let is_selected = time_sig == *preset_ts;
-                                let button = egui::Button::new(*label)
-                                    .fill(if is_selected {
-                                        egui::Color32::from_rgb(0, 150, 0) // Green for selected
-                                    } else {
-                                        egui::Color32::from_gray(60) // Dark gray for unselected
-                                    });
-                                
-                                if ui.add(button).clicked() && !is_selected {
-                                    self.adjust_segment_time_signature(&selected_id, *preset_ts);
-                                    changed = true;
-                                }
-                            }
-                        });
+                    
+                    if ui.small_button("80").clicked() {
+                        self.adjust_segment_bpm(&selected_id, 80.0);
+                        changed = true;
                     }
+                    if ui.small_button("120").clicked() {
+                        self.adjust_segment_bpm(&selected_id, 120.0);
+                        changed = true;
+                    }
+                    if ui.small_button("140").clicked() {
+                        self.adjust_segment_bpm(&selected_id, 140.0);
+                        changed = true;
+                    }
+                    if ui.small_button("160").clicked() {
+                        self.adjust_segment_bpm(&selected_id, 160.0);
+                        changed = true;
+                    }
+                }
 
+                // Time signature controls if selected - direct placement
+                let current_time_signature = {
+                    if let Ok(timeline) = self.timeline.lock() {
+                        timeline.get_segment(&selected_id).map(|s| s.time_signature)
+                    } else {
+                        None
+                    }
+                };
+                
+                if let Some(time_sig) = current_time_signature {
                     ui.separator();
-
-                    // Segment renaming
-                    let current_name = {
-                        if let Ok(timeline) = self.timeline.lock() {
-                            timeline.get_segment(&selected_id).map(|s| s.pattern_id.clone()).unwrap_or_default()
-                        } else {
-                            String::new()
+                    
+                    ui.label("Time Sig:");
+                    let presets = [
+                        ("4/4", crate::audio::TimeSignature::four_four()),
+                        ("3/4", crate::audio::TimeSignature::three_four()),
+                        ("5/4", crate::audio::TimeSignature::five_four()),
+                        ("6/8", crate::audio::TimeSignature::six_eight()),
+                        ("7/8", crate::audio::TimeSignature::seven_eight()),
+                    ];
+                    
+                    for (label, preset_ts) in &presets {
+                        let is_selected = time_sig == *preset_ts;
+                        let button = egui::Button::new(*label)
+                            .small()
+                            .fill(if is_selected {
+                                egui::Color32::from_rgb(0, 150, 0) // Green for selected
+                            } else {
+                                egui::Color32::from_gray(60) // Dark gray for unselected
+                            });
+                        
+                        if ui.add(button).clicked() && !is_selected {
+                            self.adjust_segment_time_signature(&selected_id, *preset_ts);
+                            changed = true;
                         }
-                    };
-
-                    if self.rename_text.is_empty() {
-                        self.rename_text = current_name.clone();
                     }
+                }
 
-                    ui.horizontal(|ui| {
-                        ui.label("Name:");
-                        if ui.text_edit_singleline(&mut self.rename_text).changed() {
-                            // Apply rename immediately
-                            let new_name = self.rename_text.trim().to_string();
-                            if !new_name.is_empty() {
-                                self.rename_selected_segment(&new_name);
-                                changed = true;
-                            }
-                        }
-                    });
+                // Segment renaming if selected - direct placement
+                let current_name = {
+                    if let Ok(timeline) = self.timeline.lock() {
+                        timeline.get_segment(&selected_id).map(|s| s.pattern_id.clone()).unwrap_or_default()
+                    } else {
+                        String::new()
+                    }
+                };
+
+                if self.rename_text.is_empty() {
+                    self.rename_text = current_name.clone();
+                }
+
+                ui.separator();
+                
+                ui.label("Name:");
+                if ui.text_edit_singleline(&mut self.rename_text).changed() {
+                    let new_name = self.rename_text.trim().to_string();
+                    if !new_name.is_empty() {
+                        self.rename_selected_segment(&new_name);
+                        changed = true;
+                    }
                 }
             }
 
+            // Export button on the right - direct placement
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                // Export button
                 if ui.button("📁 Export").clicked() {
                     self.export_timeline();
                     changed = true;

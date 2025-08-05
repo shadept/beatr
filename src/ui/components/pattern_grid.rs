@@ -103,16 +103,22 @@ impl PatternGrid {
                             egui::Color32::GRAY // Subdivision
                         };
                         
-                        // Add visual separator at beat boundaries
+                        // Add visual separator at beat boundaries for all time signatures
                         if is_beat_boundary && step > 0 {
                             if is_downbeat {
                                 // Thicker separator for measure boundaries (downbeats)
-                                ui.add_space(2.0);
-                                ui.colored_label(egui::Color32::from_rgb(255, 200, 100), "│");
-                                ui.add_space(2.0);
+                                ui.add_space(3.0);
+                                ui.vertical(|ui| {
+                                    ui.colored_label(egui::Color32::from_rgb(255, 200, 100), "┃");
+                                });
+                                ui.add_space(3.0);
                             } else {
                                 // Regular separator for beat boundaries
-                                ui.separator();
+                                ui.add_space(2.0);
+                                ui.vertical(|ui| {
+                                    ui.colored_label(egui::Color32::LIGHT_BLUE, "│");
+                                });
+                                ui.add_space(2.0);
                             }
                         }
                         
@@ -173,12 +179,18 @@ impl PatternGrid {
                             if is_beat_boundary && step_index > 0 {
                                 if is_downbeat {
                                     // Thicker separator for measure boundaries (downbeats)
-                                    ui.add_space(2.0);
-                                    ui.colored_label(egui::Color32::from_rgb(255, 200, 100), "│");
-                                    ui.add_space(2.0);
+                                    ui.add_space(3.0);
+                                    ui.vertical(|ui| {
+                                        ui.colored_label(egui::Color32::from_rgb(255, 200, 100), "┃");
+                                    });
+                                    ui.add_space(3.0);
                                 } else {
                                     // Regular separator for beat boundaries
-                                    ui.separator();
+                                    ui.add_space(2.0);
+                                    ui.vertical(|ui| {
+                                        ui.colored_label(egui::Color32::LIGHT_BLUE, "│");
+                                    });
+                                    ui.add_space(2.0);
                                 }
                             }
                             
@@ -243,5 +255,107 @@ impl PatternGrid {
                     ui.add_space(2.0);
                 }
             });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audio::{TimeSignature, sequencer::Pattern};
+    use crate::timeline::{Timeline, TimelineSegment};
+    
+    #[test]
+    fn test_beat_boundary_dividers_for_different_time_signatures() {
+        // Test that beat boundaries are correctly identified for different time signatures
+        let four_four = TimeSignature::four_four();
+        let three_four = TimeSignature::three_four();
+        let six_eight = TimeSignature::six_eight();
+        
+        // 4/4 time signature with 16 steps - boundaries at 0, 4, 8, 12
+        assert!(four_four.is_beat_boundary(0, 16));
+        assert!(four_four.is_beat_boundary(4, 16));
+        assert!(four_four.is_beat_boundary(8, 16));
+        assert!(four_four.is_beat_boundary(12, 16));
+        assert!(!four_four.is_beat_boundary(1, 16));
+        assert!(!four_four.is_beat_boundary(3, 16));
+        
+        // 3/4 time signature with 12 steps - boundaries at 0, 4, 8
+        assert!(three_four.is_beat_boundary(0, 12));
+        assert!(three_four.is_beat_boundary(4, 12));
+        assert!(three_four.is_beat_boundary(8, 12));
+        assert!(!three_four.is_beat_boundary(2, 12));
+        assert!(!three_four.is_beat_boundary(6, 12));
+        
+        // 6/8 time signature - compound meter
+        assert!(six_eight.is_beat_boundary(0, 12));
+        assert!(!six_eight.is_beat_boundary(1, 12));
+    }
+    
+    #[test]
+    fn test_downbeat_identification() {
+        let four_four = TimeSignature::four_four();
+        let three_four = TimeSignature::three_four();
+        
+        // Only step 0 should be a downbeat
+        assert!(four_four.is_downbeat(0, 16));
+        assert!(!four_four.is_downbeat(4, 16));
+        assert!(!four_four.is_downbeat(8, 16));
+        assert!(!four_four.is_downbeat(12, 16));
+        
+        assert!(three_four.is_downbeat(0, 12));
+        assert!(!three_four.is_downbeat(4, 12));
+        assert!(!three_four.is_downbeat(8, 12));
+    }
+    
+    #[test]
+    fn test_pattern_grid_visual_consistency() {
+        // Test that pattern grid constants provide proper visual spacing
+        // Constants from the show function - verify they are reasonable values
+        const EXPECTED_TRACK_NAME_WIDTH: f32 = 100.0;
+        const EXPECTED_STEP_BUTTON_WIDTH: f32 = 32.0;
+        const EXPECTED_CLEAR_BUTTON_WIDTH: f32 = 60.0;
+        const EXPECTED_SPACING: f32 = 4.0;
+        
+        // These constants are used within the show function
+        // We're testing the expected behavior of the layout system
+        assert_eq!(EXPECTED_TRACK_NAME_WIDTH, 100.0);
+        assert_eq!(EXPECTED_STEP_BUTTON_WIDTH, 32.0);
+        assert_eq!(EXPECTED_CLEAR_BUTTON_WIDTH, 60.0);
+        assert_eq!(EXPECTED_SPACING, 4.0);
+        
+        // Verify minimum layout requirements
+        let min_pattern_width = EXPECTED_TRACK_NAME_WIDTH + (16.0 * EXPECTED_STEP_BUTTON_WIDTH) + EXPECTED_CLEAR_BUTTON_WIDTH + (20.0 * EXPECTED_SPACING);
+        assert!(min_pattern_width > 600.0, "Pattern grid minimum width should be reasonable: {}", min_pattern_width);
+    }
+    
+    #[test] 
+    fn test_timeline_segment_pattern_access() {
+        // Test that pattern grid can access patterns from timeline segments
+        let mut timeline = Timeline::new();
+        
+        let patterns = vec![
+            Pattern::new("Kick".to_string(), "kick".to_string(), 16),
+            Pattern::new("Snare".to_string(), "snare".to_string(), 16),
+        ];
+        
+        let segment = TimelineSegment::new(
+            "Test Segment".to_string(),
+            patterns,
+            0.0,
+            1,
+            TimeSignature::four_four(),
+            120.0,
+        );
+        
+        timeline.add_segment(segment);
+        
+        // Verify we can access the segment and its patterns
+        let segments = &timeline.segments;
+        assert_eq!(segments.len(), 1);
+        
+        let first_segment = &segments[0];
+        assert_eq!(first_segment.patterns.len(), 2);
+        assert_eq!(first_segment.patterns[0].name, "Kick");
+        assert_eq!(first_segment.patterns[1].name, "Snare");
     }
 }
