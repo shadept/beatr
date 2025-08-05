@@ -1,0 +1,76 @@
+{
+  "metadata": {
+    "name": "Example Drum Track",
+    "version": "1.0",
+    "created_at": "2024-01-01 12:00:00 UTC",
+    "modified_at": "2024-01-01 12:00:00 UTC",
+    "author": "Beatr User",
+    "description": "A simple drum track example with kick and snare patterns"
+  },
+  "timeline": {
+    "segments": [
+      {
+        "id": "segment_0",
+        "start_time": 0.0,
+        "duration": 4.0,
+        "pattern_id": "Main Beat",
+        "patterns": [
+          {
+            "name": "Kick",
+            "steps": [
+              {"active": true, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": true, "velocity": 0.8},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": true, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": true, "velocity": 0.8},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0}
+            ],
+            "sample_name": "kick"
+          },
+          {
+            "name": "Snare",
+            "steps": [
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": true, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": true, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0},
+              {"active": false, "velocity": 1.0}
+            ],
+            "sample_name": "snare"
+          }
+        ],
+        "loop_count": 1,
+        "time_signature": {
+          "numerator": 4,
+          "denominator": 4
+        },
+        "bpm": 120.0
+      }
+    ],
+    "current_position": 0.0,
+    "playback_state": "Stopped"
+  },
+  "global_bpm": 120.0,
+  "global_volume": 1.0
+}

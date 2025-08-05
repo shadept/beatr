@@ -3,6 +3,7 @@ use eframe::egui;
 mod audio;
 mod ui;
 mod timeline;
+mod project;
 
 use ui::DrumComposerApp;
 

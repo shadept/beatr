@@ -1,16 +1,24 @@
 use eframe::egui;
 use std::sync::{Arc, Mutex};
 
-use crate::audio::{Sequencer, TimeSignature};
+use crate::audio::TimeSignature;
+use crate::timeline::Timeline;
 
 pub struct TimeSignatureControl;
 
 impl TimeSignatureControl {
-    pub fn show(ui: &mut egui::Ui, sequencer: &Arc<Mutex<Sequencer>>, custom_numerator: &mut String, custom_denominator: &mut String) -> bool {
+    pub fn show(ui: &mut egui::Ui, timeline: &Arc<Mutex<Timeline>>, selected_segment_id: Option<&str>, custom_numerator: &mut String, custom_denominator: &mut String, validation_error: &mut Option<String>) -> bool {
         let mut changed = false;
         let current_time_signature = {
-            let sequencer_lock = sequencer.lock().unwrap();
-            sequencer_lock.get_time_signature()
+            let timeline_lock = timeline.lock().unwrap();
+            // Get time signature from the selected segment, or default to 4/4
+            if let Some(segment_id) = selected_segment_id {
+                timeline_lock.get_segment(segment_id)
+                    .map(|segment| segment.time_signature)
+                    .unwrap_or_else(|| TimeSignature::four_four())
+            } else {
+                TimeSignature::four_four()
+            }
         };
 
         ui.horizontal(|ui| {
@@ -38,9 +46,13 @@ impl TimeSignatureControl {
                     });
 
                 if ui.add(button).clicked() {
-                    if let Ok(mut seq) = sequencer.try_lock() {
-                        seq.set_time_signature(*preset_ts);
-                        changed = true;
+                    if let Ok(mut timeline_lock) = timeline.try_lock() {
+                        if let Some(segment_id) = selected_segment_id {
+                            if let Some(segment) = timeline_lock.get_segment_mut(segment_id) {
+                                segment.time_signature = *preset_ts;
+                                changed = true;
+                            }
+                        }
                     }
                 }
             }
@@ -83,19 +95,27 @@ impl TimeSignatureControl {
                 if let (Ok(num), Ok(den)) = (custom_numerator.parse::<u8>(), custom_denominator.parse::<u8>()) {
                     match TimeSignature::new(num, den) {
                         Ok(new_ts) => {
-                            if let Ok(mut seq) = sequencer.try_lock() {
-                                seq.set_time_signature(new_ts);
-                                changed = true;
+                            if let Ok(mut timeline_lock) = timeline.try_lock() {
+                                if let Some(segment_id) = selected_segment_id {
+                                    if let Some(segment) = timeline_lock.get_segment_mut(segment_id) {
+                                        segment.time_signature = new_ts;
+                                        changed = true;
+                                        *validation_error = None; // Clear any previous error
+                                    }
+                                }
                             }
                         }
-                        Err(_) => {
+                        Err(error_msg) => {
+                            // Show validation error to user
+                            *validation_error = Some(error_msg);
                             // Reset to current values if invalid
                             *custom_numerator = current_time_signature.numerator.to_string();
                             *custom_denominator = current_time_signature.denominator.to_string();
                         }
                     }
                 } else if numerator_response.lost_focus() || denominator_response.lost_focus() {
-                    // Reset to current values if parse fails and focus is lost
+                    // Show parse error and reset to current values
+                    *validation_error = Some("Invalid number format. Use integers only.".to_string());
                     *custom_numerator = current_time_signature.numerator.to_string();
                     *custom_denominator = current_time_signature.denominator.to_string();
                 }
@@ -111,8 +131,14 @@ impl TimeSignatureControl {
             // Show optimal loop length hint
             let optimal_length = current_time_signature.optimal_loop_length(4);
             let current_loop_length = {
-                let sequencer_lock = sequencer.lock().unwrap();
-                sequencer_lock.get_loop_length()
+                let timeline_lock = timeline.lock().unwrap();
+                if let Some(segment_id) = selected_segment_id {
+                    timeline_lock.get_segment(segment_id)
+                        .map(|segment| segment.patterns.get(0).map(|pattern| pattern.steps.len()).unwrap_or(16))
+                        .unwrap_or(16)
+                } else {
+                    16 // default
+                }
             };
 
             if optimal_length != current_loop_length {
@@ -120,6 +146,15 @@ impl TimeSignatureControl {
                 ui.colored_label(
                     egui::Color32::YELLOW,
                     format!("💡 Suggested: {} steps", optimal_length)
+                );
+            }
+            
+            // Display validation error if present
+            if let Some(error_msg) = validation_error {
+                ui.add_space(4.0);
+                ui.colored_label(
+                    egui::Color32::RED,
+                    format!("⚠️ {}", error_msg)
                 );
             }
         });

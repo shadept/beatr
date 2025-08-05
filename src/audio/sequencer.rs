@@ -1,6 +1,7 @@
 use super::SampleBank;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeSignature {
     pub numerator: u8,   // Number of beats per measure (1-32)
     pub denominator: u8, // Note value for one beat (1, 2, 4, 8, 16, 32)
@@ -83,7 +84,7 @@ impl TimeSignature {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Step {
     pub active: bool,
     pub velocity: f32,
@@ -105,7 +106,7 @@ impl Step {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pattern {
     pub name: String,
     pub steps: Vec<Step>,

@@ -8,8 +8,21 @@ pub struct PatternGrid;
 
 impl PatternGrid {
     pub fn show(ui: &mut egui::Ui, timeline: &Arc<Mutex<Timeline>>, selected_segment_id: Option<&str>) {
-        // Timeline mode - no separate sequencer state needed
-        let (current_step, loop_length, time_signature) = (0, 16, crate::audio::TimeSignature::four_four());
+        // Timeline mode - get time signature from selected segment
+        let (current_step, loop_length, time_signature) = if let Some(id) = selected_segment_id {
+            if let Ok(timeline) = timeline.lock() {
+                if let Some(segment) = timeline.get_segment(id) {
+                    let loop_len = segment.patterns.get(0).map(|p| p.steps.len()).unwrap_or(16);
+                    (0, loop_len, segment.time_signature)
+                } else {
+                    (0, 16, crate::audio::TimeSignature::four_four())
+                }
+            } else {
+                (0, 16, crate::audio::TimeSignature::four_four())
+            }
+        } else {
+            (0, 16, crate::audio::TimeSignature::four_four())
+        };
 
         // Determine which segment to display patterns from
         let segment_to_display = if let Some(id) = selected_segment_id {
