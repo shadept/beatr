@@ -4,6 +4,23 @@ use std::sync::{Arc, Mutex};
 use crate::audio::TimeSignature;
 use crate::timeline::Timeline;
 
+// Theme-aware color helper functions for time signature control
+fn get_selected_time_sig_color(visuals: &egui::Visuals) -> egui::Color32 {
+    if visuals.dark_mode {
+        egui::Color32::from_rgb(0, 150, 0)
+    } else {
+        egui::Color32::from_rgb(0, 120, 0)
+    }
+}
+
+fn get_unselected_time_sig_color(visuals: &egui::Visuals) -> egui::Color32 {
+    if visuals.dark_mode {
+        egui::Color32::from_gray(60)
+    } else {
+        egui::Color32::from_gray(200)
+    }
+}
+
 pub struct TimeSignatureControl;
 
 impl TimeSignatureControl {
@@ -36,9 +53,9 @@ impl TimeSignatureControl {
                     let is_selected = current_time_signature == *preset_ts;
                     let button = egui::Button::new(*label)
                         .fill(if is_selected {
-                            egui::Color32::from_rgb(0, 150, 0)
+                            get_selected_time_sig_color(&ui.visuals())
                         } else {
-                            egui::Color32::from_gray(60)
+                            get_unselected_time_sig_color(&ui.visuals())
                         });
 
                     if ui.add(button).clicked() {
@@ -128,9 +145,9 @@ impl TimeSignatureControl {
                         let is_selected = current_time_signature == *preset_ts;
                         let button = egui::Button::new(*label)
                             .fill(if is_selected {
-                                egui::Color32::from_rgb(0, 150, 0)
+                                get_selected_time_sig_color(&ui.visuals())
                             } else {
-                                egui::Color32::from_gray(60)
+                                get_unselected_time_sig_color(&ui.visuals())
                             });
 
                         if ui.add(button).clicked() {

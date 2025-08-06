@@ -1,9 +1,10 @@
 use super::components::{
-    PatternGrid, TempoControl, TimeSignatureControl, TimelineView, TransportControls,
+    PatternGrid, TempoControl, TimeSignatureControl, TimelineView, TransportControls, SettingsDialog,
 };
-use crate::audio::AudioEngine;
+use crate::audio::engine::{AudioEngine, AudioDeviceInfo};
 use crate::project::Project;
 use crate::timeline::Timeline;
+use crate::settings::AppSettings;
 use eframe::egui;
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
@@ -22,27 +23,42 @@ pub struct DrumComposerApp {
     current_project: Project,
     current_project_path: Option<PathBuf>,
     project_modified: bool,
+    // Settings management
+    settings: AppSettings,
+    settings_dialog: SettingsDialog,
+    // Theme monitoring
+    last_resolved_theme: String,
+    theme_change_notification: Option<String>,
 }
 
 impl DrumComposerApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        // Load settings from file
+        let settings = AppSettings::load_from_file();
+        
+        let initial_resolved_theme = settings.ui.resolve_theme();
+        
         let mut app = DrumComposerApp {
             audio_engine: None,
             error_message: None,
-            tempo: 120.0,
-            custom_loop_length_text: "16".to_string(),
-            custom_time_sig_numerator: "4".to_string(),
-            custom_time_sig_denominator: "4".to_string(),
+            tempo: settings.defaults.default_bpm,
+            custom_loop_length_text: settings.defaults.default_pattern_length.to_string(),
+            custom_time_sig_numerator: settings.defaults.default_time_signature.0.to_string(),
+            custom_time_sig_denominator: settings.defaults.default_time_signature.1.to_string(),
             time_sig_validation_error: None,
             timeline: Arc::new(Mutex::new(Timeline::new())), // Temporary, will be replaced
             timeline_view: None,
             current_project: Project::new("New Project".to_string()),
             current_project_path: None,
             project_modified: false,
+            settings_dialog: SettingsDialog::new(settings.clone()),
+            last_resolved_theme: initial_resolved_theme.clone(),
+            theme_change_notification: None,
+            settings,
         };
 
-        // Initialize audio engine
-        match AudioEngine::new() {
+        // Initialize audio engine with settings
+        match AudioEngine::new_with_settings(app.settings.audio.clone()) {
             Ok(engine) => {
                 // Samples are now loaded automatically in AudioEngine::new()
 
@@ -203,12 +219,179 @@ impl DrumComposerApp {
         let modified_indicator = if self.project_modified { "*" } else { "" };
         format!("Beatr - {}{}", project_name, modified_indicator)
     }
+
+    // Settings management methods
+    fn handle_settings_change(&mut self) {
+        // Get updated settings from dialog
+        let new_settings = self.settings_dialog.get_settings().clone();
+        
+        // Apply audio settings immediately if supported
+        if let Some(ref audio_engine) = self.audio_engine {
+            // Update master volume
+            audio_engine.set_master_volume(new_settings.audio.master_volume);
+        }
+        
+        // Store settings for future audio engine recreation if needed
+        self.settings = new_settings.clone();
+        
+        // Save settings to file
+        if let Err(e) = self.settings.auto_save() {
+            self.error_message = Some(format!("Failed to save settings: {}", e));
+        }
+        
+        // Note: Sample rate, buffer size, and device changes require audio engine restart
+        // which is not implemented in this version - would show a message to restart app
+    }
+    
+    fn refresh_audio_devices(&mut self) {
+        // Get detailed device information
+        match AudioEngine::get_available_devices_detailed() {
+            Ok(devices_detailed) => {
+                self.settings_dialog.update_available_devices_detailed(devices_detailed);
+            }
+            Err(_) => {
+                // Fallback to simple device enumeration
+                match AudioEngine::get_available_devices() {
+                    Ok(devices) => {
+                        self.settings_dialog.update_available_devices(devices);
+                    }
+                    Err(e) => {
+                        self.error_message = Some(format!("Failed to refresh audio devices: {}", e));
+                    }
+                }
+            }
+        }
+    }
+
+    fn handle_device_monitoring(&mut self) {
+        if let Some(ref mut audio_engine) = self.audio_engine {
+            // Check if monitoring is enabled and device is available
+            if self.settings.audio.device_monitoring_enabled {
+                match audio_engine.monitor_device_availability() {
+                    Ok(is_available) => {
+                        if !is_available {
+                            // Device is no longer available, handle fallback
+                            match audio_engine.handle_device_disconnection() {
+                                Ok(action) => {
+                                    match action {
+                                        crate::audio::engine::DeviceRecoveryAction::NoAction => {
+                                            // Device became available again, no action needed
+                                        }
+                                        crate::audio::engine::DeviceRecoveryAction::FallbackToDefault => {
+                                            if let Ok(success) = audio_engine.switch_to_device("Default Device".to_string()) {
+                                                if success {
+                                                    self.settings.audio.preferred_device = None;
+                                                    self.error_message = Some("Audio device disconnected. Switched to default device.".to_string());
+                                                    // Update settings
+                                                    if let Err(e) = self.settings.auto_save() {
+                                                        eprintln!("Failed to save settings after device fallback: {}", e);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        crate::audio::engine::DeviceRecoveryAction::FallbackToDevice(device_name) => {
+                                            if let Ok(success) = audio_engine.switch_to_device(device_name.clone()) {
+                                                if success {
+                                                    self.settings.audio.preferred_device = Some(device_name.clone());
+                                                    self.error_message = Some(format!("Audio device disconnected. Switched to: {}", device_name));
+                                                    // Update settings
+                                                    if let Err(e) = self.settings.auto_save() {
+                                                        eprintln!("Failed to save settings after device fallback: {}", e);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        crate::audio::engine::DeviceRecoveryAction::DeviceUnavailable => {
+                                            self.error_message = Some("Audio device disconnected and no fallback devices are available.".to_string());
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("Device monitoring error: {}", e);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Device monitoring failed: {}", e);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Theme-aware color helper functions
+fn get_header_bg_color(visuals: &egui::Visuals) -> egui::Color32 {
+    if visuals.dark_mode {
+        egui::Color32::from_gray(20)
+    } else {
+        egui::Color32::from_gray(248)
+    }
+}
+
+fn get_container_bg_color(visuals: &egui::Visuals) -> egui::Color32 {
+    if visuals.dark_mode {
+        egui::Color32::from_gray(30)
+    } else {
+        egui::Color32::from_gray(245)
+    }
+}
+
+fn get_container_stroke_color(visuals: &egui::Visuals) -> egui::Color32 {
+    if visuals.dark_mode {
+        egui::Color32::from_gray(50)
+    } else {
+        egui::Color32::from_gray(200)
+    }
+}
+
+fn get_secondary_container_bg_color(visuals: &egui::Visuals) -> egui::Color32 {
+    if visuals.dark_mode {
+        egui::Color32::from_gray(35)
+    } else {
+        egui::Color32::from_gray(240)
+    }
+}
+
+fn get_footer_bg_color(visuals: &egui::Visuals) -> egui::Color32 {
+    if visuals.dark_mode {
+        egui::Color32::from_gray(20)
+    } else {
+        egui::Color32::from_gray(250)
+    }
+}
+
+fn get_muted_text_color(visuals: &egui::Visuals) -> egui::Color32 {
+    if visuals.dark_mode {
+        egui::Color32::from_gray(180)
+    } else {
+        egui::Color32::from_gray(100)
+    }
 }
 
 impl eframe::App for DrumComposerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Set a dark theme for better visual contrast with the sequencer
-        ctx.set_visuals(egui::Visuals::dark());
+        // Apply UI settings with theme resolution and monitoring
+        let resolved_theme = self.settings.ui.resolve_theme();
+        
+        // Check for auto theme changes (only if using auto mode)
+        if self.settings.ui.theme == "auto" && resolved_theme != self.last_resolved_theme {
+            self.theme_change_notification = Some(format!(
+                "Theme automatically switched to {} to match system", 
+                resolved_theme
+            ));
+            self.last_resolved_theme = resolved_theme.clone();
+        }
+        
+        let visuals = match resolved_theme.as_str() {
+            "light" => egui::Visuals::light(),
+            _ => egui::Visuals::dark(),
+        };
+        ctx.set_visuals(visuals);
+        
+        // Apply UI scale comprehensively
+        ctx.set_pixels_per_point(self.settings.ui.ui_scale);
 
         // Update window title
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.get_window_title()));
@@ -252,6 +435,13 @@ impl eframe::App for DrumComposerApp {
                     ui.label("Edit operations (coming soon)");
                 });
                 
+                ui.menu_button("Settings", |ui| {
+                    if ui.button("Preferences...").clicked() {
+                        self.settings_dialog.open();
+                        ui.close_menu();
+                    }
+                });
+                
                 ui.menu_button("Help", |ui| {
                     if ui.button("About").clicked() {
                         // TODO: Show about dialog
@@ -273,7 +463,7 @@ impl eframe::App for DrumComposerApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             // Header with improved styling
             egui::Frame::none()
-                .fill(egui::Color32::from_gray(20))
+                .fill(get_header_bg_color(&ui.visuals()))
                 .inner_margin(egui::Margin::symmetric(16.0, 12.0))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
@@ -286,6 +476,24 @@ impl eframe::App for DrumComposerApp {
 
             ui.add_space(6.0);
 
+            // Show theme change notification (info message)
+            if let Some(notification) = self.theme_change_notification.clone() {
+                egui::Frame::none()
+                    .fill(egui::Color32::from_rgb(20, 50, 60))
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 100, 120)))
+                    .inner_margin(egui::Margin::same(8.0))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.colored_label(egui::Color32::from_rgb(100, 180, 220),
+                                           format!("ℹ {}", notification));
+                            if ui.small_button("✕").clicked() {
+                                self.theme_change_notification = None;
+                            }
+                        });
+                    });
+                ui.add_space(6.0);
+            }
+            
             if let Some(ref error) = self.error_message {
                 egui::Frame::none()
                     .fill(egui::Color32::from_rgb(60, 20, 20))
@@ -303,8 +511,8 @@ impl eframe::App for DrumComposerApp {
 
                 // Flattened transport controls - minimal nesting for better alignment
                 egui::Frame::none()
-                    .fill(egui::Color32::from_gray(30))
-                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(50)))
+                    .fill(get_container_bg_color(&ui.visuals()))
+                    .stroke(egui::Stroke::new(1.0, get_container_stroke_color(&ui.visuals())))
                     .inner_margin(egui::Margin::same(12.0))
                     .rounding(4.0)
                     .show(ui, |ui| {
@@ -405,8 +613,8 @@ impl eframe::App for DrumComposerApp {
                 let mut timeline_modified = false;
                 if let Some(ref mut timeline_view) = self.timeline_view {
                     egui::Frame::none()
-                        .fill(egui::Color32::from_gray(30))
-                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(50)))
+                        .fill(get_container_bg_color(&ui.visuals()))
+                        .stroke(egui::Stroke::new(1.0, get_container_stroke_color(&ui.visuals())))
                         .inner_margin(egui::Margin::same(12.0))
                         .rounding(4.0)
                         .show(ui, |ui| {
@@ -456,7 +664,7 @@ impl eframe::App for DrumComposerApp {
                     .show(ui, |ui| {
                         if let Some(ref segment_name) = selected_segment_name {
                             egui::Frame::none()
-                                .fill(egui::Color32::from_gray(35))
+                                .fill(get_secondary_container_bg_color(&ui.visuals()))
                                 .inner_margin(egui::Margin::same(8.0))
                                 .rounding(4.0)
                                 .show(ui, |ui| {
@@ -481,13 +689,13 @@ impl eframe::App for DrumComposerApp {
 
                 // Footer with help text
                 egui::Frame::none()
-                    .fill(egui::Color32::from_gray(20))
+                    .fill(get_footer_bg_color(&ui.visuals()))
                     .inner_margin(egui::Margin::same(8.0))
                     .rounding(4.0)
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.small(egui::RichText::new("💡 Tip: Click step buttons to create patterns • Numbers show measure positions • Clear to reset tracks")
-                                .color(egui::Color32::from_gray(180)));
+                                .color(get_muted_text_color(&ui.visuals())));
                         });
                     });
             } else {
@@ -500,6 +708,27 @@ impl eframe::App for DrumComposerApp {
                 });
             }
         });
+
+        // Handle settings dialog
+        let settings_changed = self.settings_dialog.show(ctx);
+        if settings_changed {
+            self.handle_settings_change();
+        }
+
+        // Handle device refresh requests
+        if self.settings_dialog.take_device_refresh_requested() {
+            self.refresh_audio_devices();
+        }
+
+        // Handle device monitoring (check periodically, not every frame)
+        // This is a simple approach - in a real app you might want to use a timer
+        static mut MONITORING_COUNTER: u32 = 0;
+        unsafe {
+            MONITORING_COUNTER += 1;
+            if MONITORING_COUNTER % 300 == 0 { // Check every ~5 seconds at 60fps
+                self.handle_device_monitoring();
+            }
+        }
 
         // Request repaint for real-time updates
         ctx.request_repaint();
@@ -573,6 +802,9 @@ mod tests {
     
     // Helper function to create a test app without UI dependencies
     fn create_test_app() -> DrumComposerApp {
+        let settings = AppSettings::default();
+        let initial_resolved_theme = settings.ui.resolve_theme();
+        
         DrumComposerApp {
             audio_engine: None,
             error_message: None,
@@ -586,6 +818,10 @@ mod tests {
             current_project: Project::new("New Project".to_string()),
             current_project_path: None,
             project_modified: false,
+            settings_dialog: SettingsDialog::new(settings.clone()),
+            last_resolved_theme: initial_resolved_theme,
+            theme_change_notification: None,
+            settings,
         }
     }
 }

@@ -4,6 +4,7 @@ mod audio;
 mod ui;
 mod timeline;
 mod project;
+mod settings;
 
 use ui::DrumComposerApp;
 

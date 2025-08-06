@@ -4,6 +4,65 @@ use std::sync::{Arc, Mutex};
 use crate::audio::Step;
 use crate::timeline::Timeline;
 
+// Theme-aware color helper functions for pattern grid
+fn get_pattern_grid_bg_color(visuals: &egui::Visuals) -> egui::Color32 {
+    if visuals.dark_mode {
+        egui::Color32::from_gray(25)
+    } else {
+        egui::Color32::from_gray(250)
+    }
+}
+
+fn get_pattern_grid_stroke_color(visuals: &egui::Visuals) -> egui::Color32 {
+    if visuals.dark_mode {
+        egui::Color32::from_gray(50)
+    } else {
+        egui::Color32::from_gray(190)
+    }
+}
+
+fn get_step_button_colors(visuals: &egui::Visuals, is_active: bool, is_current: bool, is_downbeat: bool, is_beat: bool) -> egui::Color32 {
+    if visuals.dark_mode {
+        match (is_active, is_current, is_downbeat, is_beat) {
+            (true, true, _, _) => egui::Color32::from_rgb(255, 200, 0), // Active and current (gold)
+            (true, false, true, _) => egui::Color32::from_rgb(0, 255, 100), // Active downbeat (bright green)
+            (true, false, false, true) => egui::Color32::from_rgb(0, 200, 0), // Active beat (green)
+            (true, false, false, false) => egui::Color32::from_rgb(0, 150, 0), // Active subdivision (darker green)
+            (false, true, _, _) => egui::Color32::from_rgb(120, 120, 0), // Current but inactive (dim yellow)
+            (false, false, true, _) => egui::Color32::from_gray(60), // Inactive downbeat (lighter gray)
+            (false, false, false, true) => egui::Color32::from_gray(50), // Inactive beat (medium gray)
+            (false, false, false, false) => egui::Color32::from_gray(40), // Inactive subdivision (dark gray)
+        }
+    } else {
+        match (is_active, is_current, is_downbeat, is_beat) {
+            (true, true, _, _) => egui::Color32::from_rgb(255, 180, 0), // Active and current (gold)
+            (true, false, true, _) => egui::Color32::from_rgb(0, 180, 50), // Active downbeat (green)
+            (true, false, false, true) => egui::Color32::from_rgb(0, 160, 0), // Active beat (darker green)
+            (true, false, false, false) => egui::Color32::from_rgb(0, 120, 0), // Active subdivision (dark green)
+            (false, true, _, _) => egui::Color32::from_rgb(255, 220, 150), // Current but inactive (light yellow)
+            (false, false, true, _) => egui::Color32::from_gray(200), // Inactive downbeat (light gray)
+            (false, false, false, true) => egui::Color32::from_gray(220), // Inactive beat (lighter gray)
+            (false, false, false, false) => egui::Color32::from_gray(240), // Inactive subdivision (lightest gray)
+        }
+    }
+}
+
+fn get_error_container_colors(visuals: &egui::Visuals) -> (egui::Color32, egui::Color32) {
+    if visuals.dark_mode {
+        (egui::Color32::from_rgb(60, 20, 20), egui::Color32::from_rgb(100, 40, 40))
+    } else {
+        (egui::Color32::from_rgb(255, 240, 240), egui::Color32::from_rgb(220, 180, 180))
+    }
+}
+
+fn get_downbeat_header_color(visuals: &egui::Visuals) -> egui::Color32 {
+    if visuals.dark_mode {
+        egui::Color32::from_rgb(255, 200, 100) // Downbeat (orange/gold)
+    } else {
+        egui::Color32::from_rgb(200, 120, 0) // Darker orange for light theme
+    }
+}
+
 pub struct PatternGrid;
 
 impl PatternGrid {
@@ -73,8 +132,8 @@ impl PatternGrid {
 
         // Create a frame for the entire grid with subtle styling
         egui::Frame::none()
-            .fill(egui::Color32::from_gray(25))
-            .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(50)))
+            .fill(get_pattern_grid_bg_color(&ui.visuals()))
+            .stroke(egui::Stroke::new(1.0, get_pattern_grid_stroke_color(&ui.visuals())))
             .inner_margin(egui::Margin::same(8.0))
             .show(ui, |ui| {
                 
@@ -96,7 +155,7 @@ impl PatternGrid {
                         let text_color = if step == current_step {
                             egui::Color32::YELLOW // Current step (highest priority)
                         } else if is_downbeat {
-                            egui::Color32::from_rgb(255, 200, 100) // Downbeat (orange/gold)
+                            get_downbeat_header_color(&ui.visuals())
                         } else if is_beat_boundary {
                             egui::Color32::WHITE // Beat boundary
                         } else {
@@ -109,7 +168,7 @@ impl PatternGrid {
                                 // Thicker separator for measure boundaries (downbeats)
                                 ui.add_space(3.0);
                                 ui.vertical(|ui| {
-                                    ui.colored_label(egui::Color32::from_rgb(255, 200, 100), "┃");
+                                    ui.colored_label(get_downbeat_header_color(&ui.visuals()), "┃");
                                 });
                                 ui.add_space(3.0);
                             } else {
@@ -181,7 +240,7 @@ impl PatternGrid {
                                     // Thicker separator for measure boundaries (downbeats)
                                     ui.add_space(3.0);
                                     ui.vertical(|ui| {
-                                        ui.colored_label(egui::Color32::from_rgb(255, 200, 100), "┃");
+                                        ui.colored_label(get_downbeat_header_color(&ui.visuals()), "┃");
                                     });
                                     ui.add_space(3.0);
                                 } else {
@@ -194,25 +253,13 @@ impl PatternGrid {
                                 }
                             }
                             
-                            let button_color = if step.active {
-                                if step_index == current_step {
-                                    egui::Color32::from_rgb(255, 200, 0) // Active and current (gold)
-                                } else if is_downbeat {
-                                    egui::Color32::from_rgb(0, 255, 100) // Active downbeat (bright green)
-                                } else if is_beat_boundary {
-                                    egui::Color32::from_rgb(0, 200, 0) // Active beat (green)
-                                } else {
-                                    egui::Color32::from_rgb(0, 150, 0) // Active subdivision (darker green)
-                                }
-                            } else if step_index == current_step {
-                                egui::Color32::from_rgb(120, 120, 0) // Current but inactive (dim yellow)
-                            } else if is_downbeat {
-                                egui::Color32::from_gray(60) // Inactive downbeat (lighter gray)
-                            } else if is_beat_boundary {
-                                egui::Color32::from_gray(50) // Inactive beat (medium gray)
-                            } else {
-                                egui::Color32::from_gray(40) // Inactive subdivision (dark gray)
-                            };
+                            let button_color = get_step_button_colors(
+                                &ui.visuals(),
+                                step.active,
+                                step_index == current_step,
+                                is_downbeat,
+                                is_beat_boundary
+                            );
 
                             // Create button with consistent sizing
                             let button = egui::Button::new("●")
@@ -235,9 +282,10 @@ impl PatternGrid {
                         ui.add_space(SPACING);
 
                         // Clear button with fixed width
+                        let (clear_fill, clear_stroke) = get_error_container_colors(&ui.visuals());
                         let clear_button = egui::Button::new("Clear")
-                            .fill(egui::Color32::from_rgb(60, 20, 20))
-                            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(100, 40, 40)));
+                            .fill(clear_fill)
+                            .stroke(egui::Stroke::new(1.0, clear_stroke));
                             
                         if ui.add_sized([CLEAR_BUTTON_WIDTH, 32.0], clear_button).clicked() {
                             // Clear pattern directly in timeline segment

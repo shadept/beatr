@@ -33,10 +33,11 @@ impl TimelineSegment {
     pub fn new(pattern_id: String, patterns: Vec<Pattern>, start_time: f64, loop_count: usize, time_signature: TimeSignature, bpm: f32) -> Self {
         let id = generate_segment_id();
         
-        // Calculate duration based on loop count, time signature, and BPM
-        // Duration = (beats_per_loop * loop_count) / (BPM / 60)
-        let beats_per_loop = time_signature.numerator as f64;
-        let total_beats = beats_per_loop * loop_count as f64;
+        // Calculate duration based on loop count (bars), time signature, and BPM
+        // Duration = (beats_per_bar * bar_count) / (BPM / 60)
+        // For 4 bars in 4/4 time: (4 beats/bar * 4 bars) / (93 BPM / 60) = 16 beats / 1.55 = 10.32 seconds
+        let beats_per_bar = time_signature.numerator as f64;
+        let total_beats = beats_per_bar * loop_count as f64;  // loop_count represents bars
         let beats_per_second = bpm as f64 / 60.0;
         let duration = total_beats / beats_per_second;
         
@@ -61,9 +62,9 @@ impl TimelineSegment {
     }
     
     pub fn update_duration(&mut self) {
-        // Recalculate duration when loop count, time signature, or BPM changes
-        let beats_per_loop = self.time_signature.numerator as f64;
-        let total_beats = beats_per_loop * self.loop_count as f64;
+        // Recalculate duration when loop count (bars), time signature, or BPM changes
+        let beats_per_bar = self.time_signature.numerator as f64;
+        let total_beats = beats_per_bar * self.loop_count as f64;  // loop_count represents bars
         let beats_per_second = self.bpm as f64 / 60.0;
         self.duration = total_beats / beats_per_second;
     }
@@ -642,6 +643,165 @@ mod tests {
         assert_eq!(empty_timeline.get_average_bpm(), 120.0); // Default
         
         println!("✅ Timeline BPM synchronization test passed");
+    }
+
+    #[test]
+    fn test_timing_fix_93_bpm_4_bars() {
+        // Test the specific case mentioned in the issue: 4 bars at 93 BPM should be ~10.3 seconds
+        let pattern = Pattern::new("test_pattern".to_string(), "kick".to_string(), 16);
+        let patterns = vec![pattern];
+        let segment = TimelineSegment::new(
+            "test_pattern".to_string(),
+            patterns,
+            0.0,
+            4, // 4 bars (not beats)
+            TimeSignature::four_four(),
+            93.0, // 93 BPM
+        );
+
+        // Expected calculation: 4 bars × 4 beats/bar = 16 beats
+        // 16 beats ÷ (93 BPM / 60) = 16 ÷ 1.55 = 10.32 seconds
+        let expected_duration = 16.0 / (93.0 / 60.0);
+        println!("Expected duration for 4 bars at 93 BPM: {:.2} seconds", expected_duration);
+        println!("Actual duration: {:.2} seconds", segment.duration);
+        
+        // Allow small floating point error
+        assert!((segment.duration - expected_duration).abs() < 0.01, 
+               "Duration should be ~{:.2} seconds, got {:.2}", expected_duration, segment.duration);
+        
+        // Verify it's approximately 10.32 seconds (close to the user's expected 10.3)
+        assert!((segment.duration - 10.32).abs() < 0.01, 
+               "Duration should be approximately 10.32 seconds, got {:.2}", segment.duration);
+               
+        println!("✅ Timing fix verified: 4 bars at 93 BPM = {:.2} seconds", segment.duration);
+    }
+
+    #[test]
+    fn test_audio_timing_vs_timeline_timing() {
+        // Test to understand the discrepancy between audio playback speed and timeline duration
+        let pattern = Pattern::new("test_pattern".to_string(), "kick".to_string(), 16);
+        let mut patterns = vec![pattern];
+        
+        // Set up some active steps in the pattern
+        patterns[0].steps[0].active = true;  // Step 0
+        patterns[0].steps[4].active = true;  // Step 4 
+        patterns[0].steps[8].active = true;  // Step 8
+        patterns[0].steps[12].active = true; // Step 12
+        
+        let segment = TimelineSegment::new(
+            "test_pattern".to_string(),
+            patterns,
+            0.0,
+            4, // 4 bars
+            TimeSignature::four_four(),
+            93.0, // 93 BPM
+        );
+
+        println!("\n=== TIMING ANALYSIS ===");
+        println!("Timeline segment duration: {:.2} seconds", segment.duration);
+        println!("Pattern has {} steps", segment.patterns[0].steps.len());
+        println!("Loop count (bars): {}", segment.loop_count);
+        println!("BPM: {}", segment.bpm);
+        
+        // Calculate what the audio engine would do
+        let sample_rate = 44100.0;
+        let beats_per_second = segment.bpm / 60.0;
+        let steps_per_second = beats_per_second * 4.0; // 16th notes as used in audio engine
+        let samples_per_step = (sample_rate / steps_per_second) as usize;
+        
+        println!("\n=== AUDIO ENGINE CALCULATIONS ===");
+        println!("Sample rate: {} Hz", sample_rate);
+        println!("Beats per second: {:.2}", beats_per_second);
+        println!("Steps per second: {:.2} (16th notes)", steps_per_second);
+        println!("Samples per step: {}", samples_per_step);
+        
+        // Calculate how long one complete loop (16 steps) takes in audio
+        let pattern_length = segment.patterns[0].steps.len();
+        let audio_loop_duration_samples = pattern_length * samples_per_step;
+        let audio_loop_duration_seconds = audio_loop_duration_samples as f64 / sample_rate as f64;
+        
+        println!("\n=== AUDIO LOOP TIME ===");
+        println!("Pattern length: {} steps", pattern_length);
+        println!("Audio loop duration: {:.2} seconds (for {} steps)", audio_loop_duration_seconds, pattern_length);
+        println!("Audio total duration for {} loops: {:.2} seconds", segment.loop_count, 
+                audio_loop_duration_seconds * segment.loop_count as f64);
+        
+        // Now let's see what the discrepancy is
+        let expected_total_audio_duration = audio_loop_duration_seconds * segment.loop_count as f64;
+        let timeline_duration = segment.duration;
+        let ratio = timeline_duration / expected_total_audio_duration;
+        
+        println!("\n=== DISCREPANCY ANALYSIS ===");
+        println!("Timeline thinks it should take: {:.2} seconds", timeline_duration);
+        println!("Audio would actually take: {:.2} seconds", expected_total_audio_duration);
+        println!("Ratio (timeline/audio): {:.2}x", ratio);
+        
+        if (ratio - 2.0).abs() < 0.1 {
+            println!("🔍 FOUND THE ISSUE: Audio is playing ~2x faster than timeline expects!");
+        }
+        
+        // Let's analyze why...
+        // Timeline calculation: 4 bars * 4 beats/bar = 16 beats total
+        // At 93 BPM: 16 beats / (93/60) = 10.32 seconds
+        
+        // Audio calculation: 16 steps as 16th notes
+        // At 93 BPM: 16 steps / (93/60 * 4) = 16 / 6.2 = 2.58 seconds per loop
+        // For 4 loops: 2.58 * 4 = 10.32 seconds
+        
+        // Wait... that should match. Let me recalculate...
+        let manual_audio_calculation = (pattern_length as f64) / (beats_per_second as f64 * 4.0);
+        println!("\nManual audio calculation for one loop: {:.2} seconds", manual_audio_calculation);
+        println!("For {} loops: {:.2} seconds", segment.loop_count, manual_audio_calculation * segment.loop_count as f64);
+        
+        println!("✅ Audio timing analysis complete");
+    }
+
+    #[test]
+    fn test_audio_synchronization_fix() {
+        // Test that audio synchronization correctly uses segment-relative timing
+        let pattern = Pattern::new("test_pattern".to_string(), "kick".to_string(), 16);
+        let patterns = vec![pattern];
+        
+        // Create a segment that starts at 5.0 seconds
+        let segment = TimelineSegment::new(
+            "test_pattern".to_string(),
+            patterns,
+            5.0, // start_time
+            4,   // 4 bars
+            TimeSignature::four_four(),
+            93.0, // 93 BPM
+        );
+
+        println!("\n=== AUDIO SYNCHRONIZATION FIX TEST ===");
+        println!("Segment starts at: {:.2} seconds", segment.start_time);
+        println!("Segment ends at: {:.2} seconds", segment.end_time());
+        println!("Segment duration: {:.2} seconds", segment.duration);
+        
+        // Simulate AudioState synchronization at different timeline positions
+        let sample_rate = 44100.0;
+        let mut audio_state = crate::audio::engine::AudioState::new(sample_rate, segment.bpm);
+        
+        // Test positions within the segment
+        // At 93 BPM: steps per second = (93/60) * 4 = 6.2 steps/second
+        let test_positions = [
+            (5.0, 0),   // Segment start -> step 0
+            (6.29, 7),  // 1.29 seconds into segment -> (1.29 * 6.2) as usize = 7
+            (7.58, 15), // 2.58 seconds into segment -> (2.58 * 6.2) as usize = 15  
+            (8.87, 7),  // 3.87 seconds into segment -> (3.87 * 6.2) as usize = 23 % 16 = 7
+            (10.16, 15), // 5.16 seconds into segment -> (5.16 * 6.2) as usize = 31 % 16 = 15
+        ];
+        
+        for (timeline_pos, expected_step) in test_positions {
+            audio_state.synchronize_with_timeline(timeline_pos, segment.start_time, segment.bpm, sample_rate);
+            println!("Timeline pos {:.2}s -> step {} (expected {})", 
+                    timeline_pos, audio_state.current_step, expected_step);
+            
+            assert_eq!(audio_state.current_step, expected_step, 
+                      "At timeline position {:.2}s, expected step {}, got {}", 
+                      timeline_pos, expected_step, audio_state.current_step);
+        }
+        
+        println!("✅ Audio synchronization fix verified - uses segment-relative timing");
     }
 
     #[test]
