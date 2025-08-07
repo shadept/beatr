@@ -1,6 +1,6 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use crate::audio::{sequencer::Pattern, TimeSignature};
 use serde::{Deserialize, Serialize};
-use crate::audio::{TimeSignature, sequencer::Pattern};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // Simple ID generator for timeline segments
 static SEGMENT_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -30,17 +30,24 @@ pub struct TimelineSegment {
 }
 
 impl TimelineSegment {
-    pub fn new(pattern_id: String, patterns: Vec<Pattern>, start_time: f64, loop_count: usize, time_signature: TimeSignature, bpm: f32) -> Self {
+    pub fn new(
+        pattern_id: String,
+        patterns: Vec<Pattern>,
+        start_time: f64,
+        loop_count: usize,
+        time_signature: TimeSignature,
+        bpm: f32,
+    ) -> Self {
         let id = generate_segment_id();
-        
+
         // Calculate duration based on loop count (bars), time signature, and BPM
         // Duration = (beats_per_bar * bar_count) / (BPM / 60)
         // For 4 bars in 4/4 time: (4 beats/bar * 4 bars) / (93 BPM / 60) = 16 beats / 1.55 = 10.32 seconds
         let beats_per_bar = time_signature.numerator as f64;
-        let total_beats = beats_per_bar * loop_count as f64;  // loop_count represents bars
+        let total_beats = beats_per_bar * loop_count as f64; // loop_count represents bars
         let beats_per_second = bpm as f64 / 60.0;
         let duration = total_beats / beats_per_second;
-        
+
         TimelineSegment {
             id,
             start_time,
@@ -52,33 +59,33 @@ impl TimelineSegment {
             bpm,
         }
     }
-    
+
     pub fn end_time(&self) -> f64 {
         self.start_time + self.duration
     }
-    
+
     pub fn contains_time(&self, time: f64) -> bool {
         time >= self.start_time && time < self.end_time()
     }
-    
+
     pub fn update_duration(&mut self) {
         // Recalculate duration when loop count (bars), time signature, or BPM changes
         let beats_per_bar = self.time_signature.numerator as f64;
-        let total_beats = beats_per_bar * self.loop_count as f64;  // loop_count represents bars
+        let total_beats = beats_per_bar * self.loop_count as f64; // loop_count represents bars
         let beats_per_second = self.bpm as f64 / 60.0;
         self.duration = total_beats / beats_per_second;
     }
-    
+
     pub fn set_loop_count(&mut self, loop_count: usize) {
         self.loop_count = loop_count.max(1);
         self.update_duration();
     }
-    
+
     pub fn set_bpm(&mut self, bpm: f32) {
         self.bpm = bpm.max(60.0).min(300.0); // Reasonable BPM range
         self.update_duration();
     }
-    
+
     pub fn set_time_signature(&mut self, time_signature: TimeSignature) {
         self.time_signature = time_signature;
         self.update_duration();
@@ -88,7 +95,7 @@ impl TimelineSegment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Timeline {
     pub segments: Vec<TimelineSegment>,
-    pub current_position: f64,  // Current playback position in seconds
+    pub current_position: f64, // Current playback position in seconds
     pub playback_state: PlaybackState,
 }
 
@@ -100,26 +107,27 @@ impl Timeline {
             playback_state: PlaybackState::Stopped,
         }
     }
-    
+
     pub fn total_duration(&self) -> f64 {
         self.segments
             .iter()
             .map(|segment| segment.end_time())
             .fold(0.0, f64::max)
     }
-    
+
     pub fn add_segment(&mut self, segment: TimelineSegment) -> String {
         let id = segment.id.clone();
-        
+
         // Insert segment in chronological order
-        let insert_index = self.segments
+        let insert_index = self
+            .segments
             .binary_search_by(|s| s.start_time.partial_cmp(&segment.start_time).unwrap())
             .unwrap_or_else(|i| i);
-        
+
         self.segments.insert(insert_index, segment);
         id
     }
-    
+
     pub fn remove_segment(&mut self, segment_id: &str) -> Option<TimelineSegment> {
         if let Some(index) = self.segments.iter().position(|s| s.id == segment_id) {
             Some(self.segments.remove(index))
@@ -127,39 +135,40 @@ impl Timeline {
             None
         }
     }
-    
+
     pub fn get_segment(&self, segment_id: &str) -> Option<&TimelineSegment> {
         self.segments.iter().find(|s| s.id == segment_id)
     }
-    
+
     pub fn get_segment_mut(&mut self, segment_id: &str) -> Option<&mut TimelineSegment> {
         self.segments.iter_mut().find(|s| s.id == segment_id)
     }
-    
+
     pub fn get_current_segment(&self) -> Option<&TimelineSegment> {
         self.segments
             .iter()
             .find(|segment| segment.contains_time(self.current_position))
     }
-    
+
     pub fn move_segment(&mut self, segment_id: &str, new_start_time: f64) -> bool {
         if let Some(segment) = self.get_segment_mut(segment_id) {
             segment.start_time = new_start_time.max(0.0);
-            
+
             // Re-sort segments by start time
-            self.segments.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap());
+            self.segments
+                .sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap());
             true
         } else {
             false
         }
     }
-    
+
     pub fn duplicate_segment(&mut self, segment_id: &str, new_start_time: f64) -> Option<String> {
         if let Some(original) = self.get_segment(segment_id) {
             let mut new_segment = original.clone();
             new_segment.id = generate_segment_id();
             new_segment.start_time = new_start_time.max(0.0);
-            
+
             let new_id = new_segment.id.clone();
             self.add_segment(new_segment);
             Some(new_id)
@@ -167,68 +176,70 @@ impl Timeline {
             None
         }
     }
-    
+
     pub fn split_segment(&mut self, segment_id: &str, split_time: f64) -> Option<String> {
         if let Some(original) = self.get_segment(segment_id) {
             if split_time <= original.start_time || split_time >= original.end_time() {
                 return None; // Invalid split time
             }
-            
+
             // Calculate how to split the loop count
             let original_duration = original.duration;
             let first_duration = split_time - original.start_time;
             let second_duration = original.end_time() - split_time;
-            
+
             let split_ratio = first_duration / original_duration;
-            let first_loop_count = ((original.loop_count as f64 * split_ratio).round() as usize).max(1);
-            let second_loop_count = ((original.loop_count as f64 * (1.0 - split_ratio)).round() as usize).max(1);
-            
+            let first_loop_count =
+                ((original.loop_count as f64 * split_ratio).round() as usize).max(1);
+            let second_loop_count =
+                ((original.loop_count as f64 * (1.0 - split_ratio)).round() as usize).max(1);
+
             // Create second segment
             let mut second_segment = original.clone();
             second_segment.id = generate_segment_id();
             second_segment.start_time = split_time;
             second_segment.loop_count = second_loop_count;
             second_segment.duration = second_duration; // Use calculated duration instead of recalculating
-            
+
             let second_id = second_segment.id.clone();
-            
+
             // Update first segment
             if let Some(first_segment) = self.get_segment_mut(segment_id) {
                 first_segment.loop_count = first_loop_count;
                 first_segment.duration = first_duration; // Use calculated duration instead of recalculating
             }
-            
+
             self.add_segment(second_segment);
             Some(second_id)
         } else {
             None
         }
     }
-    
+
     pub fn play(&mut self) {
         self.playback_state = PlaybackState::Playing;
     }
-    
+
     pub fn pause(&mut self) {
         self.playback_state = PlaybackState::Paused;
     }
-    
+
     pub fn stop(&mut self) {
         self.playback_state = PlaybackState::Stopped;
         self.current_position = 0.0;
     }
-    
+
     pub fn seek(&mut self, position: f64) {
         self.current_position = position.max(0.0).min(self.total_duration());
     }
-    
+
     /// Update BPM for all segments and recalculate their durations
     pub fn set_global_bpm(&mut self, bpm: f32) {
         for segment in &mut self.segments {
             segment.set_bpm(bpm);
         }
     }
-    
+
     /// Get the average BPM across all segments, or a default if no segments
     pub fn get_average_bpm(&self) -> f32 {
         if self.segments.is_empty() {
@@ -238,11 +249,11 @@ impl Timeline {
             total_bpm / self.segments.len() as f32
         }
     }
-    
+
     pub fn advance_position(&mut self, delta_time: f64) -> bool {
         if self.playback_state == PlaybackState::Playing {
             self.current_position += delta_time;
-            
+
             // Check if we've reached the end
             if self.current_position >= self.total_duration() {
                 self.stop();
@@ -253,11 +264,11 @@ impl Timeline {
             false
         }
     }
-    
+
     pub fn is_playing(&self) -> bool {
         self.playback_state == PlaybackState::Playing
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.segments.is_empty()
     }
@@ -292,7 +303,7 @@ mod tests {
         assert_eq!(segment.loop_count, 4);
         assert_eq!(segment.time_signature, ts);
         assert_eq!(segment.bpm, 120.0);
-        
+
         // Duration = (4 beats per loop * 4 loops) / (120 BPM / 60) = 16 / 2 = 8 seconds
         assert!((segment.duration - 8.0).abs() < 0.001);
         assert!((segment.end_time() - 8.0).abs() < 0.001);
@@ -349,7 +360,7 @@ mod tests {
     #[test]
     fn test_timeline_basic_operations() {
         let mut timeline = Timeline::new();
-        
+
         // Test empty timeline
         assert!(timeline.is_empty());
         assert_eq!(timeline.total_duration(), 0.0);
@@ -385,7 +396,7 @@ mod tests {
         let id2 = timeline.add_segment(segment2);
 
         assert_eq!(timeline.segments.len(), 2);
-        
+
         // Test segments are ordered by start time
         assert!(timeline.segments[0].start_time <= timeline.segments[1].start_time);
 
@@ -415,7 +426,7 @@ mod tests {
     #[test]
     fn test_timeline_segment_manipulation() {
         let mut timeline = Timeline::new();
-        
+
         let pattern = Pattern::new("pattern1".to_string(), "kick".to_string(), 16);
         let patterns = vec![pattern];
         let segment = TimelineSegment::new(
@@ -437,7 +448,7 @@ mod tests {
         let duplicate_id = timeline.duplicate_segment(&id, 15.0);
         assert!(duplicate_id.is_some());
         assert_eq!(timeline.segments.len(), 2);
-        
+
         let duplicate = timeline.get_segment(&duplicate_id.unwrap()).unwrap();
         assert_eq!(duplicate.start_time, 15.0);
         assert_eq!(duplicate.pattern_id, "pattern1");
@@ -447,7 +458,7 @@ mod tests {
         let split_id = timeline.split_segment(&id, 6.0);
         assert!(split_id.is_some());
         assert_eq!(timeline.segments.len(), 3); // Original + duplicate + split
-        
+
         let original = timeline.get_segment(&id).unwrap();
         let split = timeline.get_segment(&split_id.unwrap()).unwrap();
         assert!(original.end_time() <= split.start_time);
@@ -456,7 +467,7 @@ mod tests {
     #[test]
     fn test_timeline_playback_control() {
         let mut timeline = Timeline::new();
-        
+
         // Add segment
         let pattern = Pattern::new("pattern1".to_string(), "kick".to_string(), 16);
         let patterns = vec![pattern];
@@ -493,7 +504,7 @@ mod tests {
         // Test position advancement
         timeline.current_position = 0.0;
         timeline.play();
-        
+
         let advanced = timeline.advance_position(2.0);
         assert!(advanced);
         assert_eq!(timeline.current_position, 2.0);
@@ -508,7 +519,7 @@ mod tests {
     #[test]
     fn test_timeline_with_different_time_signatures() {
         let mut timeline = Timeline::new();
-        
+
         // 4/4 segment: 4 beats * 2 loops = 8 beats at 120 BPM = 4 seconds
         let pattern1 = Pattern::new("pattern_4_4".to_string(), "kick".to_string(), 16);
         let patterns1 = vec![pattern1];
@@ -569,7 +580,7 @@ mod tests {
     #[test]
     fn test_timeline_bpm_synchronization() {
         let mut timeline = Timeline::new();
-        
+
         // Add segments with different BPMs
         let pattern1 = Pattern::new("pattern1".to_string(), "kick".to_string(), 16);
         let patterns1 = vec![pattern1];
@@ -582,7 +593,7 @@ mod tests {
             120.0, // 120 BPM
         );
         let id1 = timeline.add_segment(segment1);
-        
+
         let pattern2 = Pattern::new("pattern2".to_string(), "snare".to_string(), 16);
         let patterns2 = vec![pattern2];
         let segment2 = TimelineSegment::new(
@@ -594,54 +605,72 @@ mod tests {
             140.0, // 140 BPM
         );
         let id2 = timeline.add_segment(segment2);
-        
+
         // Test initial durations at different BPMs
         let segment1_duration = timeline.get_segment(&id1).unwrap().duration;
         let segment2_duration = timeline.get_segment(&id2).unwrap().duration;
-        
+
         // At 120 BPM: 2 loops * 4 beats / (120/60) = 8 beats / 2 beats/sec = 4 seconds
-        assert!((segment1_duration - 4.0).abs() < 0.01, "Segment 1 duration should be ~4s, got {}", segment1_duration);
-        
+        assert!(
+            (segment1_duration - 4.0).abs() < 0.01,
+            "Segment 1 duration should be ~4s, got {}",
+            segment1_duration
+        );
+
         // At 140 BPM: 1 loop * 4 beats / (140/60) = 4 beats / 2.33 beats/sec = ~1.71 seconds
         let expected_segment2_duration = 4.0 / (140.0 / 60.0);
-        assert!((segment2_duration - expected_segment2_duration).abs() < 0.01, 
-               "Segment 2 duration should be ~{:.2}s, got {}", expected_segment2_duration, segment2_duration);
-        
+        assert!(
+            (segment2_duration - expected_segment2_duration).abs() < 0.01,
+            "Segment 2 duration should be ~{:.2}s, got {}",
+            expected_segment2_duration,
+            segment2_duration
+        );
+
         let initial_total_duration = timeline.total_duration();
-        
+
         // Test global BPM update - set all segments to 100 BPM
         timeline.set_global_bpm(100.0);
-        
+
         // Check that all segments now have 100 BPM
         assert_eq!(timeline.get_segment(&id1).unwrap().bpm, 100.0);
         assert_eq!(timeline.get_segment(&id2).unwrap().bpm, 100.0);
-        
+
         // Check that durations were recalculated
         let new_segment1_duration = timeline.get_segment(&id1).unwrap().duration;
         let new_segment2_duration = timeline.get_segment(&id2).unwrap().duration;
-        
+
         // At 100 BPM: segment1 = 2 loops * 4 beats / (100/60) = 8 beats / 1.67 beats/sec = 4.8 seconds
         let expected_new_segment1_duration = 8.0 / (100.0 / 60.0);
-        assert!((new_segment1_duration - expected_new_segment1_duration).abs() < 0.01, 
-               "New segment 1 duration should be ~{:.2}s, got {}", expected_new_segment1_duration, new_segment1_duration);
-        
+        assert!(
+            (new_segment1_duration - expected_new_segment1_duration).abs() < 0.01,
+            "New segment 1 duration should be ~{:.2}s, got {}",
+            expected_new_segment1_duration,
+            new_segment1_duration
+        );
+
         // At 100 BPM: segment2 = 1 loop * 4 beats / (100/60) = 4 beats / 1.67 beats/sec = 2.4 seconds
         let expected_new_segment2_duration = 4.0 / (100.0 / 60.0);
-        assert!((new_segment2_duration - expected_new_segment2_duration).abs() < 0.01, 
-               "New segment 2 duration should be ~{:.2}s, got {}", expected_new_segment2_duration, new_segment2_duration);
-        
+        assert!(
+            (new_segment2_duration - expected_new_segment2_duration).abs() < 0.01,
+            "New segment 2 duration should be ~{:.2}s, got {}",
+            expected_new_segment2_duration,
+            new_segment2_duration
+        );
+
         // Total timeline duration should have changed
         let new_total_duration = timeline.total_duration();
-        assert!((new_total_duration - initial_total_duration).abs() > 0.1, 
-               "Timeline duration should have changed significantly");
-        
+        assert!(
+            (new_total_duration - initial_total_duration).abs() > 0.1,
+            "Timeline duration should have changed significantly"
+        );
+
         // Test average BPM calculation
         assert_eq!(timeline.get_average_bpm(), 100.0);
-        
+
         // Test with no segments
         let empty_timeline = Timeline::new();
         assert_eq!(empty_timeline.get_average_bpm(), 120.0); // Default
-        
+
         println!("✅ Timeline BPM synchronization test passed");
     }
 
@@ -662,18 +691,31 @@ mod tests {
         // Expected calculation: 4 bars × 4 beats/bar = 16 beats
         // 16 beats ÷ (93 BPM / 60) = 16 ÷ 1.55 = 10.32 seconds
         let expected_duration = 16.0 / (93.0 / 60.0);
-        println!("Expected duration for 4 bars at 93 BPM: {:.2} seconds", expected_duration);
+        println!(
+            "Expected duration for 4 bars at 93 BPM: {:.2} seconds",
+            expected_duration
+        );
         println!("Actual duration: {:.2} seconds", segment.duration);
-        
+
         // Allow small floating point error
-        assert!((segment.duration - expected_duration).abs() < 0.01, 
-               "Duration should be ~{:.2} seconds, got {:.2}", expected_duration, segment.duration);
-        
+        assert!(
+            (segment.duration - expected_duration).abs() < 0.01,
+            "Duration should be ~{:.2} seconds, got {:.2}",
+            expected_duration,
+            segment.duration
+        );
+
         // Verify it's approximately 10.32 seconds (close to the user's expected 10.3)
-        assert!((segment.duration - 10.32).abs() < 0.01, 
-               "Duration should be approximately 10.32 seconds, got {:.2}", segment.duration);
-               
-        println!("✅ Timing fix verified: 4 bars at 93 BPM = {:.2} seconds", segment.duration);
+        assert!(
+            (segment.duration - 10.32).abs() < 0.01,
+            "Duration should be approximately 10.32 seconds, got {:.2}",
+            segment.duration
+        );
+
+        println!(
+            "✅ Timing fix verified: 4 bars at 93 BPM = {:.2} seconds",
+            segment.duration
+        );
     }
 
     #[test]
@@ -681,13 +723,13 @@ mod tests {
         // Test to understand the discrepancy between audio playback speed and timeline duration
         let pattern = Pattern::new("test_pattern".to_string(), "kick".to_string(), 16);
         let mut patterns = vec![pattern];
-        
+
         // Set up some active steps in the pattern
-        patterns[0].steps[0].active = true;  // Step 0
-        patterns[0].steps[4].active = true;  // Step 4 
-        patterns[0].steps[8].active = true;  // Step 8
+        patterns[0].steps[0].active = true; // Step 0
+        patterns[0].steps[4].active = true; // Step 4
+        patterns[0].steps[8].active = true; // Step 8
         patterns[0].steps[12].active = true; // Step 12
-        
+
         let segment = TimelineSegment::new(
             "test_pattern".to_string(),
             patterns,
@@ -702,57 +744,76 @@ mod tests {
         println!("Pattern has {} steps", segment.patterns[0].steps.len());
         println!("Loop count (bars): {}", segment.loop_count);
         println!("BPM: {}", segment.bpm);
-        
+
         // Calculate what the audio engine would do
         let sample_rate = 44100.0;
         let beats_per_second = segment.bpm / 60.0;
         let steps_per_second = beats_per_second * 4.0; // 16th notes as used in audio engine
         let samples_per_step = (sample_rate / steps_per_second) as usize;
-        
+
         println!("\n=== AUDIO ENGINE CALCULATIONS ===");
         println!("Sample rate: {} Hz", sample_rate);
         println!("Beats per second: {:.2}", beats_per_second);
         println!("Steps per second: {:.2} (16th notes)", steps_per_second);
         println!("Samples per step: {}", samples_per_step);
-        
+
         // Calculate how long one complete loop (16 steps) takes in audio
         let pattern_length = segment.patterns[0].steps.len();
         let audio_loop_duration_samples = pattern_length * samples_per_step;
         let audio_loop_duration_seconds = audio_loop_duration_samples as f64 / sample_rate as f64;
-        
+
         println!("\n=== AUDIO LOOP TIME ===");
         println!("Pattern length: {} steps", pattern_length);
-        println!("Audio loop duration: {:.2} seconds (for {} steps)", audio_loop_duration_seconds, pattern_length);
-        println!("Audio total duration for {} loops: {:.2} seconds", segment.loop_count, 
-                audio_loop_duration_seconds * segment.loop_count as f64);
-        
+        println!(
+            "Audio loop duration: {:.2} seconds (for {} steps)",
+            audio_loop_duration_seconds, pattern_length
+        );
+        println!(
+            "Audio total duration for {} loops: {:.2} seconds",
+            segment.loop_count,
+            audio_loop_duration_seconds * segment.loop_count as f64
+        );
+
         // Now let's see what the discrepancy is
         let expected_total_audio_duration = audio_loop_duration_seconds * segment.loop_count as f64;
         let timeline_duration = segment.duration;
         let ratio = timeline_duration / expected_total_audio_duration;
-        
+
         println!("\n=== DISCREPANCY ANALYSIS ===");
-        println!("Timeline thinks it should take: {:.2} seconds", timeline_duration);
-        println!("Audio would actually take: {:.2} seconds", expected_total_audio_duration);
+        println!(
+            "Timeline thinks it should take: {:.2} seconds",
+            timeline_duration
+        );
+        println!(
+            "Audio would actually take: {:.2} seconds",
+            expected_total_audio_duration
+        );
         println!("Ratio (timeline/audio): {:.2}x", ratio);
-        
+
         if (ratio - 2.0).abs() < 0.1 {
             println!("🔍 FOUND THE ISSUE: Audio is playing ~2x faster than timeline expects!");
         }
-        
+
         // Let's analyze why...
         // Timeline calculation: 4 bars * 4 beats/bar = 16 beats total
         // At 93 BPM: 16 beats / (93/60) = 10.32 seconds
-        
+
         // Audio calculation: 16 steps as 16th notes
         // At 93 BPM: 16 steps / (93/60 * 4) = 16 / 6.2 = 2.58 seconds per loop
         // For 4 loops: 2.58 * 4 = 10.32 seconds
-        
+
         // Wait... that should match. Let me recalculate...
         let manual_audio_calculation = (pattern_length as f64) / (beats_per_second as f64 * 4.0);
-        println!("\nManual audio calculation for one loop: {:.2} seconds", manual_audio_calculation);
-        println!("For {} loops: {:.2} seconds", segment.loop_count, manual_audio_calculation * segment.loop_count as f64);
-        
+        println!(
+            "\nManual audio calculation for one loop: {:.2} seconds",
+            manual_audio_calculation
+        );
+        println!(
+            "For {} loops: {:.2} seconds",
+            segment.loop_count,
+            manual_audio_calculation * segment.loop_count as f64
+        );
+
         println!("✅ Audio timing analysis complete");
     }
 
@@ -761,7 +822,7 @@ mod tests {
         // Test that audio synchronization correctly uses segment-relative timing
         let pattern = Pattern::new("test_pattern".to_string(), "kick".to_string(), 16);
         let patterns = vec![pattern];
-        
+
         // Create a segment that starts at 5.0 seconds
         let segment = TimelineSegment::new(
             "test_pattern".to_string(),
@@ -776,40 +837,49 @@ mod tests {
         println!("Segment starts at: {:.2} seconds", segment.start_time);
         println!("Segment ends at: {:.2} seconds", segment.end_time());
         println!("Segment duration: {:.2} seconds", segment.duration);
-        
+
         // Simulate AudioState synchronization at different timeline positions
         let sample_rate = 44100.0;
         let mut audio_state = crate::audio::engine::AudioState::new(sample_rate, segment.bpm);
-        
+
         // Test positions within the segment
         // At 93 BPM: steps per second = (93/60) * 4 = 6.2 steps/second
         let test_positions = [
-            (5.0, 0),   // Segment start -> step 0
-            (6.29, 7),  // 1.29 seconds into segment -> (1.29 * 6.2) as usize = 7
-            (7.58, 15), // 2.58 seconds into segment -> (2.58 * 6.2) as usize = 15  
-            (8.87, 7),  // 3.87 seconds into segment -> (3.87 * 6.2) as usize = 23 % 16 = 7
+            (5.0, 0),    // Segment start -> step 0
+            (6.29, 7),   // 1.29 seconds into segment -> (1.29 * 6.2) as usize = 7
+            (7.58, 15),  // 2.58 seconds into segment -> (2.58 * 6.2) as usize = 15
+            (8.87, 7),   // 3.87 seconds into segment -> (3.87 * 6.2) as usize = 23 % 16 = 7
             (10.16, 15), // 5.16 seconds into segment -> (5.16 * 6.2) as usize = 31 % 16 = 15
         ];
-        
+
         for (timeline_pos, expected_step) in test_positions {
-            audio_state.synchronize_with_timeline(timeline_pos, segment.start_time, segment.bpm, sample_rate);
-            println!("Timeline pos {:.2}s -> step {} (expected {})", 
-                    timeline_pos, audio_state.current_step, expected_step);
-            
-            assert_eq!(audio_state.current_step, expected_step, 
-                      "At timeline position {:.2}s, expected step {}, got {}", 
-                      timeline_pos, expected_step, audio_state.current_step);
+            audio_state.synchronize_with_timeline(
+                timeline_pos,
+                segment.start_time,
+                segment.bpm,
+                sample_rate,
+            );
+            println!(
+                "Timeline pos {:.2}s -> step {} (expected {})",
+                timeline_pos, audio_state.current_step, expected_step
+            );
+
+            assert_eq!(
+                audio_state.current_step, expected_step,
+                "At timeline position {:.2}s, expected step {}, got {}",
+                timeline_pos, expected_step, audio_state.current_step
+            );
         }
-        
+
         println!("✅ Audio synchronization fix verified - uses segment-relative timing");
     }
 
     #[test]
     fn test_complex_time_signatures_and_polyrhythms() {
         use crate::audio::sequencer::Pattern;
-        
+
         let mut timeline = Timeline::new();
-        
+
         // Test odd meters: 7/8, 5/4, 11/8
         let test_signatures = [
             (TimeSignature::new(7, 8).unwrap(), "7/8"),
@@ -818,16 +888,19 @@ mod tests {
             (TimeSignature::new(13, 16).unwrap(), "13/16"),
             (TimeSignature::new(15, 8).unwrap(), "15/8"),
         ];
-        
+
         let mut current_time = 0.0;
         let mut segment_ids = Vec::new();
-        
+
         // Create segments with different complex time signatures
         for (time_sig, name) in &test_signatures {
-            let pattern = Pattern::new(format!("Pattern {}", name), "kick".to_string(), 
-                                     time_sig.optimal_loop_length(4));
+            let pattern = Pattern::new(
+                format!("Pattern {}", name),
+                "kick".to_string(),
+                time_sig.optimal_loop_length(4),
+            );
             let patterns = vec![pattern];
-            
+
             let segment = TimelineSegment::new(
                 format!("Complex {}", name),
                 patterns,
@@ -836,72 +909,100 @@ mod tests {
                 *time_sig,
                 120.0,
             );
-            
+
             current_time = segment.end_time();
             let id = timeline.add_segment(segment);
             segment_ids.push(id);
         }
-        
+
         // Verify each segment has correct time signature and duration calculations
         for (i, (time_sig, name)) in test_signatures.iter().enumerate() {
             let segment = timeline.get_segment(&segment_ids[i]).unwrap();
-            
+
             // Verify time signature matches
-            assert_eq!(segment.time_signature, *time_sig, 
-                      "Time signature mismatch for {}", name);
-            
+            assert_eq!(
+                segment.time_signature, *time_sig,
+                "Time signature mismatch for {}",
+                name
+            );
+
             // Verify optimal loop length calculation
             let expected_loop_length = time_sig.optimal_loop_length(4);
             let actual_loop_length = segment.patterns[0].steps.len();
-            assert_eq!(actual_loop_length, expected_loop_length,
-                      "Loop length mismatch for {}: expected {}, got {}", 
-                      name, expected_loop_length, actual_loop_length);
-            
+            assert_eq!(
+                actual_loop_length, expected_loop_length,
+                "Loop length mismatch for {}: expected {}, got {}",
+                name, expected_loop_length, actual_loop_length
+            );
+
             // Verify mathematical functions work correctly
-            assert!(time_sig.is_beat_boundary(0, actual_loop_length), 
-                   "Step 0 should be a beat boundary for {}", name);
-            assert!(time_sig.is_downbeat(0, actual_loop_length), 
-                   "Step 0 should be downbeat for {}", name);
-            
+            assert!(
+                time_sig.is_beat_boundary(0, actual_loop_length),
+                "Step 0 should be a beat boundary for {}",
+                name
+            );
+            assert!(
+                time_sig.is_downbeat(0, actual_loop_length),
+                "Step 0 should be downbeat for {}",
+                name
+            );
+
             // Test beat calculations for complex signatures
             let steps_per_beat = time_sig.steps_per_beat(actual_loop_length);
-            assert!(steps_per_beat > 0.0, "Steps per beat should be positive for {}", name);
-            
+            assert!(
+                steps_per_beat > 0.0,
+                "Steps per beat should be positive for {}",
+                name
+            );
+
             // Test step labeling
             let label_0 = time_sig.step_label(0, actual_loop_length);
-            assert!(label_0.starts_with("1"), "First step should start with '1' for {}", name);
-            
-            println!("✅ Complex time signature {} verified: {} steps, {:.2} steps/beat", 
-                    name, actual_loop_length, steps_per_beat);
+            assert!(
+                label_0.starts_with("1"),
+                "First step should start with '1' for {}",
+                name
+            );
+
+            println!(
+                "✅ Complex time signature {} verified: {} steps, {:.2} steps/beat",
+                name, actual_loop_length, steps_per_beat
+            );
         }
-        
+
         // Test polyrhythmic timeline (sequential segments with different time signatures)
         let total_duration = timeline.total_duration();
-        assert!(total_duration > 0.0, "Timeline should have positive duration");
-        
+        assert!(
+            total_duration > 0.0,
+            "Timeline should have positive duration"
+        );
+
         // Test smooth transitions between time signatures
         for i in 0..segment_ids.len() - 1 {
             let current_segment = timeline.get_segment(&segment_ids[i]).unwrap();
             let next_segment = timeline.get_segment(&segment_ids[i + 1]).unwrap();
-            
+
             // Verify segments are contiguous (no gaps)
             let gap = (next_segment.start_time - current_segment.end_time()).abs();
-            assert!(gap < 0.001, 
-                   "Gap between segments {} and {} should be minimal, got {:.6}", 
-                   i, i + 1, gap);
+            assert!(
+                gap < 0.001,
+                "Gap between segments {} and {} should be minimal, got {:.6}",
+                i,
+                i + 1,
+                gap
+            );
         }
-        
+
         // Test timeline navigation through complex time signatures
         timeline.current_position = 0.0;
         let first_segment = timeline.get_current_segment();
         assert!(first_segment.is_some());
         assert_eq!(first_segment.unwrap().time_signature, test_signatures[0].0);
-        
+
         // Test position in middle of timeline
         timeline.current_position = total_duration / 2.0;
         let middle_segment = timeline.get_current_segment();
         assert!(middle_segment.is_some());
-        
+
         println!("✅ Complex time signatures and polyrhythmic coordination test passed");
         println!("   Tested: 7/8, 5/4, 11/8, 13/16, 15/8 with smooth transitions");
     }

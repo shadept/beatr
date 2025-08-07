@@ -6,8 +6,8 @@ use cpal::{
 use std::sync::{Arc, Mutex};
 
 use super::SampleBank;
-use crate::timeline::Timeline;
 use crate::settings::AudioSettings;
+use crate::timeline::Timeline;
 
 /// Detailed audio device information
 #[derive(Debug, Clone, PartialEq)]
@@ -23,8 +23,8 @@ pub struct AudioDeviceInfo {
 impl AudioDeviceInfo {
     /// Check if a specific sample rate and buffer size combination is supported
     pub fn supports_config(&self, sample_rate: u32, buffer_size: u32) -> bool {
-        self.supported_sample_rates.contains(&sample_rate) && 
-        self.supported_buffer_sizes.contains(&buffer_size)
+        self.supported_sample_rates.contains(&sample_rate)
+            && self.supported_buffer_sizes.contains(&buffer_size)
     }
 }
 
@@ -62,7 +62,7 @@ impl AudioEngine {
     /// Create a new AudioEngine with the provided audio settings
     pub fn new_with_settings(settings: AudioSettings) -> Result<Self> {
         let host = cpal::default_host();
-        
+
         // Device selection based on settings
         let device = if let Some(preferred_device) = &settings.preferred_device {
             // Try to find the preferred device
@@ -76,10 +76,13 @@ impl AudioEngine {
                     }
                 }
             }
-            
+
             // Fall back to default if preferred device not found
             found_device.unwrap_or_else(|| {
-                eprintln!("Warning: Preferred device '{}' not found, using default", preferred_device);
+                eprintln!(
+                    "Warning: Preferred device '{}' not found, using default",
+                    preferred_device
+                );
                 host.default_output_device()
                     .expect("No output device available")
             })
@@ -92,14 +95,20 @@ impl AudioEngine {
         let default_config = device.default_output_config()?;
         let sample_rate = cpal::SampleRate(settings.sample_rate);
         let channels = 1; // Force mono output for simpler timing
-        
+
         println!("🎵 Audio Engine Configuration:");
-        println!("  Sample Rate: {} Hz (configured: {})", sample_rate.0, settings.sample_rate);
+        println!(
+            "  Sample Rate: {} Hz (configured: {})",
+            sample_rate.0, settings.sample_rate
+        );
         println!("  Buffer Size: {} samples", settings.buffer_size);
         println!("  Master Volume: {:.0}%", settings.master_volume * 100.0);
         println!("  Channels: {} (forced mono)", channels);
         println!("  Sample Format: {:?}", default_config.sample_format());
-        println!("  Device: {}", device.name().unwrap_or_else(|_| "Unknown".to_string()));
+        println!(
+            "  Device: {}",
+            device.name().unwrap_or_else(|_| "Unknown".to_string())
+        );
 
         let sample_bank = Arc::new(Mutex::new({
             let mut bank = SampleBank::new();
@@ -175,7 +184,9 @@ impl AudioEngine {
 
         stream.play()?;
 
-        let current_device_name = settings.preferred_device.clone()
+        let current_device_name = settings
+            .preferred_device
+            .clone()
             .unwrap_or_else(|| "Default Device".to_string());
 
         Ok(AudioEngine {
@@ -223,10 +234,10 @@ impl AudioEngine {
     pub fn get_available_devices() -> Result<Vec<String>> {
         let host = cpal::default_host();
         let mut devices = Vec::new();
-        
+
         // Add default device first
         devices.push("Default Device".to_string());
-        
+
         // Add other available devices with better error handling
         if let Ok(device_iter) = host.output_devices() {
             for device in device_iter {
@@ -237,7 +248,7 @@ impl AudioEngine {
                 }
             }
         }
-        
+
         Ok(devices)
     }
 
@@ -245,38 +256,41 @@ impl AudioEngine {
     pub fn get_available_devices_detailed() -> Result<Vec<AudioDeviceInfo>> {
         let host = cpal::default_host();
         let mut devices = Vec::new();
-        
+
         // Get default device
         if let Some(default_device) = host.default_output_device() {
             let device_info = Self::analyze_device(&default_device, true)?;
             devices.push(device_info);
         }
-        
+
         // Get other available devices
         if let Ok(device_iter) = host.output_devices() {
             for device in device_iter {
                 if let Ok(name) = device.name() {
                     // Skip if this is the default device we already added
-                    let is_default_duplicate = if let Some(default_device) = host.default_output_device() {
-                        if let Ok(default_name) = default_device.name() {
-                            name == default_name
+                    let is_default_duplicate =
+                        if let Some(default_device) = host.default_output_device() {
+                            if let Ok(default_name) = default_device.name() {
+                                name == default_name
+                            } else {
+                                false
+                            }
                         } else {
                             false
-                        }
-                    } else {
-                        false
-                    };
-                    
+                        };
+
                     if !is_default_duplicate {
                         match Self::analyze_device(&device, false) {
                             Ok(device_info) => devices.push(device_info),
-                            Err(e) => eprintln!("Warning: Failed to analyze device {}: {}", name, e),
+                            Err(e) => {
+                                eprintln!("Warning: Failed to analyze device {}: {}", name, e)
+                            }
                         }
                     }
                 }
             }
         }
-        
+
         Ok(devices)
     }
 
@@ -287,26 +301,28 @@ impl AudioEngine {
 
     /// Analyze a CPAL device to extract detailed information
     fn analyze_device(device: &Device, is_default: bool) -> Result<AudioDeviceInfo> {
-        let name = device.name().unwrap_or_else(|_| "Unknown Device".to_string());
-        
+        let name = device
+            .name()
+            .unwrap_or_else(|_| "Unknown Device".to_string());
+
         // Use device name as ID for now (CPAL doesn't provide stable device IDs)
         let id = name.clone();
-        
+
         let mut supported_sample_rates = Vec::new();
         let mut supported_buffer_sizes = Vec::new();
-        
+
         // Standard sample rates to test
         let test_sample_rates = [22050, 44100, 48000, 88200, 96000, 192000];
         // Standard buffer sizes to test (powers of 2)
         let test_buffer_sizes = [64, 128, 256, 512, 1024, 2048, 4096];
-        
+
         // Try to get supported configurations
         if let Ok(configs) = device.supported_output_configs() {
             // Collect supported sample rates from device configs
             for config in configs {
                 let min_rate = config.min_sample_rate().0;
                 let max_rate = config.max_sample_rate().0;
-                
+
                 for &test_rate in &test_sample_rates {
                     if test_rate >= min_rate && test_rate <= max_rate {
                         if !supported_sample_rates.contains(&test_rate) {
@@ -316,18 +332,22 @@ impl AudioEngine {
                 }
             }
         }
-        
+
         // If we couldn't determine supported rates, fall back to common ones
         if supported_sample_rates.is_empty() {
             supported_sample_rates = vec![44100, 48000];
         }
-        
+
         // For buffer sizes, we'll support standard power-of-2 sizes
         // Most devices support these, and CPAL handles the actual buffer configuration
         supported_buffer_sizes = test_buffer_sizes.to_vec();
-        
+
         Ok(AudioDeviceInfo {
-            name: if is_default { format!("{} (Default)", name) } else { name },
+            name: if is_default {
+                format!("{} (Default)", name)
+            } else {
+                name
+            },
             id,
             is_default,
             is_available: true,
@@ -337,9 +357,13 @@ impl AudioEngine {
     }
 
     /// Test if a specific device configuration is working
-    pub fn test_device_configuration(device_name: &str, sample_rate: u32, buffer_size: u32) -> Result<bool> {
+    pub fn test_device_configuration(
+        device_name: &str,
+        sample_rate: u32,
+        buffer_size: u32,
+    ) -> Result<bool> {
         let host = cpal::default_host();
-        
+
         // Find the device
         let device = if device_name == "Default Device" || device_name.ends_with(" (Default)") {
             host.default_output_device()
@@ -351,7 +375,7 @@ impl AudioEngine {
             } else {
                 device_name
             };
-            
+
             let devices = host.output_devices()?;
             let mut found_device = None;
             for device in devices {
@@ -364,14 +388,14 @@ impl AudioEngine {
             }
             found_device.ok_or_else(|| anyhow::anyhow!("Device '{}' not found", device_name))?
         };
-        
+
         // Test configuration by attempting to create a temporary stream
         let stream_config = StreamConfig {
             channels: 1, // Force mono for consistency
             sample_rate: cpal::SampleRate(sample_rate),
             buffer_size: cpal::BufferSize::Fixed(buffer_size),
         };
-        
+
         // Try to build a test stream (but don't play it)
         let default_config = device.default_output_config()?;
         match default_config.sample_format() {
@@ -386,7 +410,7 @@ impl AudioEngine {
                 )?;
                 // Stream creation succeeded
                 Ok(true)
-            },
+            }
             SampleFormat::I16 => {
                 let _stream = device.build_output_stream(
                     &stream_config,
@@ -397,7 +421,7 @@ impl AudioEngine {
                     None,
                 )?;
                 Ok(true)
-            },
+            }
             SampleFormat::U16 => {
                 let _stream = device.build_output_stream(
                     &stream_config,
@@ -408,7 +432,7 @@ impl AudioEngine {
                     None,
                 )?;
                 Ok(true)
-            },
+            }
             _ => Err(anyhow::anyhow!("Unsupported sample format for testing")),
         }
     }
@@ -418,16 +442,18 @@ impl AudioEngine {
         if let Ok(devices) = Self::get_available_devices() {
             // Handle default device check
             if device_name == "Default Device" || device_name.ends_with(" (Default)") {
-                return devices.iter().any(|d| d == "Default Device" || d.ends_with(" (Default)"));
+                return devices
+                    .iter()
+                    .any(|d| d == "Default Device" || d.ends_with(" (Default)"));
             }
-            
+
             // Strip "(Default)" suffix for comparison if present
             let clean_device_name = if device_name.ends_with(" (Default)") {
                 &device_name[..device_name.len() - 10]
             } else {
                 device_name
             };
-            
+
             devices.iter().any(|d| {
                 let clean_d = if d.ends_with(" (Default)") {
                     &d[..d.len() - 10]
@@ -471,13 +497,19 @@ impl AudioEngine {
         if self.settings.auto_fallback_enabled {
             // First try: fallback to last known good device
             if let Some(ref last_good_device) = self.settings.last_known_good_device {
-                if last_good_device != &self.current_device_name && Self::is_device_available(last_good_device) {
-                    return Ok(DeviceRecoveryAction::FallbackToDevice(last_good_device.clone()));
+                if last_good_device != &self.current_device_name
+                    && Self::is_device_available(last_good_device)
+                {
+                    return Ok(DeviceRecoveryAction::FallbackToDevice(
+                        last_good_device.clone(),
+                    ));
                 }
             }
 
             // Second try: fallback to default device
-            if self.current_device_name != "Default Device" && Self::is_device_available("Default Device") {
+            if self.current_device_name != "Default Device"
+                && Self::is_device_available("Default Device")
+            {
                 return Ok(DeviceRecoveryAction::FallbackToDefault);
             }
 
@@ -1108,11 +1140,17 @@ mod tests {
         match devices_result {
             Ok(devices) => {
                 assert!(!devices.is_empty(), "Should have at least default device");
-                assert!(devices.contains(&"Default Device".to_string()), "Should include default device");
+                assert!(
+                    devices.contains(&"Default Device".to_string()),
+                    "Should include default device"
+                );
                 println!("✅ Found {} audio devices", devices.len());
             }
             Err(e) => {
-                println!("⚠️  Device enumeration failed (likely no audio hardware): {}", e);
+                println!(
+                    "⚠️  Device enumeration failed (likely no audio hardware): {}",
+                    e
+                );
             }
         }
     }
@@ -1124,35 +1162,55 @@ mod tests {
         match devices_result {
             Ok(devices) => {
                 assert!(!devices.is_empty(), "Should have at least one device");
-                
+
                 // Check that we have a default device
                 let has_default = devices.iter().any(|d| d.is_default);
                 assert!(has_default, "Should have at least one default device");
-                
+
                 // Verify device info structure
                 for device in &devices {
                     assert!(!device.name.is_empty(), "Device name should not be empty");
                     assert!(!device.id.is_empty(), "Device ID should not be empty");
                     assert!(device.is_available, "Device should be marked as available");
-                    assert!(!device.supported_sample_rates.is_empty(), "Should have supported sample rates");
-                    assert!(!device.supported_buffer_sizes.is_empty(), "Should have supported buffer sizes");
-                    
+                    assert!(
+                        !device.supported_sample_rates.is_empty(),
+                        "Should have supported sample rates"
+                    );
+                    assert!(
+                        !device.supported_buffer_sizes.is_empty(),
+                        "Should have supported buffer sizes"
+                    );
+
                     // Check that common sample rates are supported
-                    assert!(device.supported_sample_rates.contains(&44100) || device.supported_sample_rates.contains(&48000),
-                        "Should support at least 44.1kHz or 48kHz");
-                    
+                    assert!(
+                        device.supported_sample_rates.contains(&44100)
+                            || device.supported_sample_rates.contains(&48000),
+                        "Should support at least 44.1kHz or 48kHz"
+                    );
+
                     // Check that common buffer sizes are supported
-                    assert!(device.supported_buffer_sizes.contains(&1024), "Should support 1024 samples buffer");
+                    assert!(
+                        device.supported_buffer_sizes.contains(&1024),
+                        "Should support 1024 samples buffer"
+                    );
                 }
-                
-                println!("✅ Detailed device enumeration test passed - {} devices found", devices.len());
+
+                println!(
+                    "✅ Detailed device enumeration test passed - {} devices found",
+                    devices.len()
+                );
                 for device in devices {
-                    println!("  Device: {} (default: {}, rates: {:?})", 
-                        device.name, device.is_default, device.supported_sample_rates);
+                    println!(
+                        "  Device: {} (default: {}, rates: {:?})",
+                        device.name, device.is_default, device.supported_sample_rates
+                    );
                 }
             }
             Err(e) => {
-                println!("⚠️  Detailed device enumeration failed (likely no audio hardware): {}", e);
+                println!(
+                    "⚠️  Detailed device enumeration failed (likely no audio hardware): {}",
+                    e
+                );
             }
         }
     }
@@ -1160,12 +1218,16 @@ mod tests {
     #[test]
     fn test_device_availability_check() {
         // Test device availability checking
-        assert!(AudioEngine::is_device_available("Default Device"), 
-            "Default Device should always be available if system has audio");
-        
-        assert!(!AudioEngine::is_device_available("Nonexistent Device 123"), 
-            "Nonexistent device should not be available");
-        
+        assert!(
+            AudioEngine::is_device_available("Default Device"),
+            "Default Device should always be available if system has audio"
+        );
+
+        assert!(
+            !AudioEngine::is_device_available("Nonexistent Device 123"),
+            "Nonexistent device should not be available"
+        );
+
         println!("✅ Device availability check test passed");
     }
 
@@ -1179,14 +1241,21 @@ mod tests {
                 println!("✅ Device configuration test passed - standard config works");
             }
             Err(e) => {
-                println!("⚠️  Device configuration test failed (likely no audio hardware): {}", e);
+                println!(
+                    "⚠️  Device configuration test failed (likely no audio hardware): {}",
+                    e
+                );
             }
         }
-        
+
         // Test with invalid config
-        let invalid_result = AudioEngine::test_device_configuration("Nonexistent Device", 44100, 1024);
-        assert!(invalid_result.is_err(), "Nonexistent device should fail configuration test");
-        
+        let invalid_result =
+            AudioEngine::test_device_configuration("Nonexistent Device", 44100, 1024);
+        assert!(
+            invalid_result.is_err(),
+            "Nonexistent device should fail configuration test"
+        );
+
         println!("✅ Device configuration validation test passed");
     }
 
@@ -1200,12 +1269,24 @@ mod tests {
             supported_sample_rates: vec![44100, 48000, 96000],
             supported_buffer_sizes: vec![256, 512, 1024, 2048],
         };
-        
-        assert!(device_info.supports_config(44100, 1024), "Should support 44.1kHz @ 1024 samples");
-        assert!(device_info.supports_config(48000, 512), "Should support 48kHz @ 512 samples");
-        assert!(!device_info.supports_config(22050, 1024), "Should not support 22.05kHz (not in list)");
-        assert!(!device_info.supports_config(44100, 128), "Should not support 128 samples (not in list)");
-        
+
+        assert!(
+            device_info.supports_config(44100, 1024),
+            "Should support 44.1kHz @ 1024 samples"
+        );
+        assert!(
+            device_info.supports_config(48000, 512),
+            "Should support 48kHz @ 512 samples"
+        );
+        assert!(
+            !device_info.supports_config(22050, 1024),
+            "Should not support 22.05kHz (not in list)"
+        );
+        assert!(
+            !device_info.supports_config(44100, 128),
+            "Should not support 128 samples (not in list)"
+        );
+
         println!("✅ AudioDeviceInfo config support test passed");
     }
 
@@ -1213,58 +1294,74 @@ mod tests {
     fn test_comprehensive_device_validation() {
         // Test validation with different device configurations
         let test_configs = [
-            ("Default Device", 44100, 1024, true),  // Should work
-            ("Default Device", 48000, 512, true),   // Should work
-            ("Default Device", 22050, 256, true),   // Should work
+            ("Default Device", 44100, 1024, true),      // Should work
+            ("Default Device", 48000, 512, true),       // Should work
+            ("Default Device", 22050, 256, true),       // Should work
             ("Nonexistent Device", 44100, 1024, false), // Should fail
         ];
-        
+
         for (device_name, sample_rate, buffer_size, should_succeed) in test_configs {
-            let result = AudioEngine::test_device_configuration(device_name, sample_rate, buffer_size);
-            
+            let result =
+                AudioEngine::test_device_configuration(device_name, sample_rate, buffer_size);
+
             if should_succeed {
                 match result {
                     Ok(success) => {
-                        assert!(success, "Device config test should succeed for {}", device_name);
-                        println!("✅ Config test passed for {} @ {}Hz / {} samples", 
-                            device_name, sample_rate, buffer_size);
+                        assert!(
+                            success,
+                            "Device config test should succeed for {}",
+                            device_name
+                        );
+                        println!(
+                            "✅ Config test passed for {} @ {}Hz / {} samples",
+                            device_name, sample_rate, buffer_size
+                        );
                     }
                     Err(e) => {
-                        println!("⚠️  Config test failed for {} (likely no audio hardware): {}", 
-                            device_name, e);
+                        println!(
+                            "⚠️  Config test failed for {} (likely no audio hardware): {}",
+                            device_name, e
+                        );
                     }
                 }
             } else {
-                assert!(result.is_err(), "Invalid device should fail configuration test");
-                println!("✅ Invalid device '{}' correctly failed configuration test", device_name);
+                assert!(
+                    result.is_err(),
+                    "Invalid device should fail configuration test"
+                );
+                println!(
+                    "✅ Invalid device '{}' correctly failed configuration test",
+                    device_name
+                );
             }
         }
-        
+
         println!("✅ Comprehensive device validation test completed");
     }
 
     #[test]
     fn test_device_configuration_edge_cases() {
         // Test edge cases for device configuration validation
-        
+
         // Test very high sample rate (should work if device supports it, or fail gracefully)
         let high_rate_result = AudioEngine::test_device_configuration("Default Device", 192000, 64);
         match high_rate_result {
             Ok(_) => println!("✅ High sample rate test passed"),
             Err(e) => println!("ℹ️  High sample rate test failed as expected: {}", e),
         }
-        
-        // Test very large buffer size (should work if device supports it, or fail gracefully) 
-        let large_buffer_result = AudioEngine::test_device_configuration("Default Device", 44100, 4096);
+
+        // Test very large buffer size (should work if device supports it, or fail gracefully)
+        let large_buffer_result =
+            AudioEngine::test_device_configuration("Default Device", 44100, 4096);
         match large_buffer_result {
             Ok(_) => println!("✅ Large buffer size test passed"),
             Err(e) => println!("ℹ️  Large buffer size test failed as expected: {}", e),
         }
-        
+
         // Test empty device name (should fail)
         let empty_name_result = AudioEngine::test_device_configuration("", 44100, 1024);
         assert!(empty_name_result.is_err(), "Empty device name should fail");
-        
+
         println!("✅ Device configuration edge cases test completed");
     }
 
@@ -1274,7 +1371,7 @@ mod tests {
         let mut settings = AudioSettings::default();
         settings.device_monitoring_enabled = true;
         settings.auto_fallback_enabled = true;
-        
+
         // Create an AudioEngine to test monitoring (if audio hardware available)
         match AudioEngine::new_with_settings(settings.clone()) {
             Ok(mut engine) => {
@@ -1288,20 +1385,23 @@ mod tests {
                         println!("⚠️  Device monitoring failed: {}", e);
                     }
                 }
-                
+
                 // Test getting current device name
                 let device_name = engine.get_current_device_name();
                 assert!(!device_name.is_empty(), "Device name should not be empty");
                 println!("✅ Current device name: {}", device_name);
-                
+
                 // Test updating last known good device
                 assert!(engine.update_last_known_good_device().is_ok());
                 println!("✅ Updated last known good device");
-                
+
                 println!("✅ Device monitoring functionality test passed");
             }
             Err(e) => {
-                println!("⚠️  Device monitoring test skipped (no audio hardware): {}", e);
+                println!(
+                    "⚠️  Device monitoring test skipped (no audio hardware): {}",
+                    e
+                );
             }
         }
     }
@@ -1314,19 +1414,19 @@ mod tests {
         settings.auto_fallback_enabled = true;
         settings.preferred_device = Some("Test Device".to_string());
         settings.last_known_good_device = Some("Fallback Device".to_string());
-        
+
         // This test focuses on the fallback logic rather than actual audio hardware
         // We can test the DeviceRecoveryAction enum and logic patterns
-        
+
         // Test NoAction case - when current device is available
         // (We can't easily test this without mocking, but we can test the enum)
         let no_action = DeviceRecoveryAction::NoAction;
         assert_eq!(no_action, DeviceRecoveryAction::NoAction);
-        
+
         // Test FallbackToDefault case
         let fallback_default = DeviceRecoveryAction::FallbackToDefault;
         assert_eq!(fallback_default, DeviceRecoveryAction::FallbackToDefault);
-        
+
         // Test FallbackToDevice case
         let fallback_device = DeviceRecoveryAction::FallbackToDevice("Test Device".to_string());
         match &fallback_device {
@@ -1335,11 +1435,11 @@ mod tests {
             }
             _ => panic!("Expected FallbackToDevice variant"),
         }
-        
+
         // Test DeviceUnavailable case
         let unavailable = DeviceRecoveryAction::DeviceUnavailable;
         assert_eq!(unavailable, DeviceRecoveryAction::DeviceUnavailable);
-        
+
         println!("✅ Device fallback logic structures test passed");
     }
 
@@ -1347,19 +1447,31 @@ mod tests {
     fn test_device_monitoring_settings_integration() {
         // Test that device monitoring settings are properly integrated
         let default_settings = AudioSettings::default();
-        
+
         // Check that monitoring is enabled by default
-        assert!(default_settings.device_monitoring_enabled, "Device monitoring should be enabled by default");
-        assert!(default_settings.auto_fallback_enabled, "Auto fallback should be enabled by default");
-        assert!(default_settings.last_known_good_device.is_none(), "Last known good device should be None initially");
-        
+        assert!(
+            default_settings.device_monitoring_enabled,
+            "Device monitoring should be enabled by default"
+        );
+        assert!(
+            default_settings.auto_fallback_enabled,
+            "Auto fallback should be enabled by default"
+        );
+        assert!(
+            default_settings.last_known_good_device.is_none(),
+            "Last known good device should be None initially"
+        );
+
         // Test settings with monitoring disabled
         let mut disabled_settings = default_settings.clone();
         disabled_settings.device_monitoring_enabled = false;
-        
+
         // Test that validation still works with new fields
-        assert!(disabled_settings.validate().is_ok(), "Settings with disabled monitoring should validate");
-        
+        assert!(
+            disabled_settings.validate().is_ok(),
+            "Settings with disabled monitoring should validate"
+        );
+
         println!("✅ Device monitoring settings integration test passed");
     }
 }

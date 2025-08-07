@@ -1,10 +1,10 @@
 use eframe::egui;
 
 mod audio;
-mod ui;
-mod timeline;
 mod project;
 mod settings;
+mod timeline;
+mod ui;
 
 use ui::DrumComposerApp;
 

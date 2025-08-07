@@ -24,13 +24,21 @@ fn get_unselected_time_sig_color(visuals: &egui::Visuals) -> egui::Color32 {
 pub struct TimeSignatureControl;
 
 impl TimeSignatureControl {
-    pub fn show(ui: &mut egui::Ui, timeline: &Arc<Mutex<Timeline>>, selected_segment_id: Option<&str>, custom_numerator: &mut String, custom_denominator: &mut String, validation_error: &mut Option<String>) -> bool {
+    pub fn show(
+        ui: &mut egui::Ui,
+        timeline: &Arc<Mutex<Timeline>>,
+        selected_segment_id: Option<&str>,
+        custom_numerator: &mut String,
+        custom_denominator: &mut String,
+        validation_error: &mut Option<String>,
+    ) -> bool {
         let mut changed = false;
         let current_time_signature = {
             let timeline_lock = timeline.lock().unwrap();
             // Get time signature from the selected segment, or default to 4/4
             if let Some(segment_id) = selected_segment_id {
-                timeline_lock.get_segment(segment_id)
+                timeline_lock
+                    .get_segment(segment_id)
                     .map(|segment| segment.time_signature)
                     .unwrap_or_else(|| TimeSignature::four_four())
             } else {
@@ -51,12 +59,11 @@ impl TimeSignatureControl {
 
                 for (label, preset_ts) in &common_presets {
                     let is_selected = current_time_signature == *preset_ts;
-                    let button = egui::Button::new(*label)
-                        .fill(if is_selected {
-                            get_selected_time_sig_color(&ui.visuals())
-                        } else {
-                            get_unselected_time_sig_color(&ui.visuals())
-                        });
+                    let button = egui::Button::new(*label).fill(if is_selected {
+                        get_selected_time_sig_color(&ui.visuals())
+                    } else {
+                        get_unselected_time_sig_color(&ui.visuals())
+                    });
 
                     if ui.add(button).clicked() {
                         if let Ok(mut timeline_lock) = timeline.try_lock() {
@@ -97,16 +104,21 @@ impl TimeSignatureControl {
                 }
 
                 // Process custom input
-                if (numerator_response.lost_focus() || denominator_response.lost_focus()) ||
-                   ((numerator_response.has_focus() || denominator_response.has_focus()) &&
-                    ui.input(|i| i.key_pressed(egui::Key::Enter))) {
-
-                    if let (Ok(num), Ok(den)) = (custom_numerator.parse::<u8>(), custom_denominator.parse::<u8>()) {
+                if (numerator_response.lost_focus() || denominator_response.lost_focus())
+                    || ((numerator_response.has_focus() || denominator_response.has_focus())
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter)))
+                {
+                    if let (Ok(num), Ok(den)) = (
+                        custom_numerator.parse::<u8>(),
+                        custom_denominator.parse::<u8>(),
+                    ) {
                         match TimeSignature::new(num, den) {
                             Ok(new_ts) => {
                                 if let Ok(mut timeline_lock) = timeline.try_lock() {
                                     if let Some(segment_id) = selected_segment_id {
-                                        if let Some(segment) = timeline_lock.get_segment_mut(segment_id) {
+                                        if let Some(segment) =
+                                            timeline_lock.get_segment_mut(segment_id)
+                                        {
                                             segment.time_signature = new_ts;
                                             changed = true;
                                             *validation_error = None;
@@ -117,7 +129,8 @@ impl TimeSignatureControl {
                             Err(error_msg) => {
                                 *validation_error = Some(error_msg);
                                 *custom_numerator = current_time_signature.numerator.to_string();
-                                *custom_denominator = current_time_signature.denominator.to_string();
+                                *custom_denominator =
+                                    current_time_signature.denominator.to_string();
                             }
                         }
                     } else if numerator_response.lost_focus() || denominator_response.lost_focus() {
@@ -143,17 +156,17 @@ impl TimeSignatureControl {
 
                     for (label, preset_ts) in &more_presets {
                         let is_selected = current_time_signature == *preset_ts;
-                        let button = egui::Button::new(*label)
-                            .fill(if is_selected {
-                                get_selected_time_sig_color(&ui.visuals())
-                            } else {
-                                get_unselected_time_sig_color(&ui.visuals())
-                            });
+                        let button = egui::Button::new(*label).fill(if is_selected {
+                            get_selected_time_sig_color(&ui.visuals())
+                        } else {
+                            get_unselected_time_sig_color(&ui.visuals())
+                        });
 
                         if ui.add(button).clicked() {
                             if let Ok(mut timeline_lock) = timeline.try_lock() {
                                 if let Some(segment_id) = selected_segment_id {
-                                    if let Some(segment) = timeline_lock.get_segment_mut(segment_id) {
+                                    if let Some(segment) = timeline_lock.get_segment_mut(segment_id)
+                                    {
                                         segment.time_signature = *preset_ts;
                                         changed = true;
                                     }
@@ -167,8 +180,15 @@ impl TimeSignatureControl {
                     let current_loop_length = {
                         let timeline_lock = timeline.lock().unwrap();
                         if let Some(segment_id) = selected_segment_id {
-                            timeline_lock.get_segment(segment_id)
-                                .map(|segment| segment.patterns.get(0).map(|pattern| pattern.steps.len()).unwrap_or(16))
+                            timeline_lock
+                                .get_segment(segment_id)
+                                .map(|segment| {
+                                    segment
+                                        .patterns
+                                        .get(0)
+                                        .map(|pattern| pattern.steps.len())
+                                        .unwrap_or(16)
+                                })
                                 .unwrap_or(16)
                         } else {
                             16

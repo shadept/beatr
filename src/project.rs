@@ -1,7 +1,8 @@
+use crate::settings::DefaultSettings;
+use crate::timeline::Timeline;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use anyhow::Result;
-use crate::timeline::Timeline;
 
 /// Project metadata and version information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,7 +17,9 @@ pub struct ProjectMetadata {
 
 impl Default for ProjectMetadata {
     fn default() -> Self {
-        let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string();
         ProjectMetadata {
             name: "Untitled Project".to_string(),
             version: "1.0".to_string(),
@@ -40,7 +43,7 @@ pub struct Project {
 impl Default for Project {
     fn default() -> Self {
         Project {
-            metadata: ProjectMetadata::default(),  
+            metadata: ProjectMetadata::default(),
             timeline: Timeline::new(),
             global_bpm: 120.0,
             global_volume: 1.0,
@@ -56,11 +59,21 @@ impl Project {
         project
     }
 
+    /// Create a new project with default settings applied
+    pub fn new_with_defaults(name: String, defaults: &DefaultSettings) -> Self {
+        let mut project = Project::default();
+        project.metadata.name = name;
+        project.global_bpm = defaults.default_bpm;
+        project
+    }
+
     /// Save project to a JSON file
     pub fn save_to_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         // Update modified timestamp
-        self.metadata.modified_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
-        
+        self.metadata.modified_at = chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string();
+
         let json = serde_json::to_string_pretty(self)?;
         std::fs::write(path, json)?;
         Ok(())
@@ -88,7 +101,12 @@ impl Project {
     }
 
     /// Update project metadata
-    pub fn update_metadata(&mut self, name: Option<String>, author: Option<String>, description: Option<String>) {
+    pub fn update_metadata(
+        &mut self,
+        name: Option<String>,
+        author: Option<String>,
+        description: Option<String>,
+    ) {
         if let Some(name) = name {
             self.metadata.name = name;
         }
@@ -98,7 +116,9 @@ impl Project {
         if let Some(description) = description {
             self.metadata.description = Some(description);
         }
-        self.metadata.modified_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
+        self.metadata.modified_at = chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string();
     }
 
     /// Get the timeline for editing
@@ -158,6 +178,33 @@ mod tests {
     }
 
     #[test]
+    fn test_project_creation_with_defaults() {
+        use crate::settings::DefaultSettings;
+
+        let custom_defaults = DefaultSettings {
+            default_bpm: 140.0,
+            default_time_signature: (3, 4),
+            default_pattern_length: 32,
+        };
+
+        let project = Project::new_with_defaults("Custom Project".to_string(), &custom_defaults);
+        assert_eq!(project.metadata.name, "Custom Project");
+        assert_eq!(project.global_bpm, 140.0);
+        assert_eq!(project.global_volume, 1.0);
+        assert_eq!(project.timeline.segments.len(), 0);
+
+        // Test with default DefaultSettings
+        let default_defaults = DefaultSettings::default();
+        let default_project =
+            Project::new_with_defaults("Default Project".to_string(), &default_defaults);
+        assert_eq!(default_project.global_bpm, 120.0);
+
+        // Test validation still passes with custom defaults
+        assert!(project.validate().is_ok());
+        assert!(default_project.validate().is_ok());
+    }
+
+    #[test]
     fn test_project_save_load() {
         let dir = tempdir().unwrap();
         let file_path = dir.path().join("test_project.beatr");
@@ -166,7 +213,7 @@ mod tests {
         let mut original_project = Project::new("Test Save Load".to_string());
         original_project.global_bpm = 140.0;
         original_project.metadata.author = Some("Test Author".to_string());
-        
+
         original_project.save_to_file(&file_path).unwrap();
 
         // Load project
@@ -175,7 +222,10 @@ mod tests {
         // Verify data integrity
         assert_eq!(loaded_project.metadata.name, "Test Save Load");
         assert_eq!(loaded_project.global_bpm, 140.0);
-        assert_eq!(loaded_project.metadata.author, Some("Test Author".to_string()));
+        assert_eq!(
+            loaded_project.metadata.author,
+            Some("Test Author".to_string())
+        );
     }
 
     #[test]
@@ -208,28 +258,28 @@ mod tests {
 
     #[test]
     fn test_project_with_timeline_segments() {
-        use crate::audio::{TimeSignature, sequencer::Pattern};
+        use crate::audio::{sequencer::Pattern, TimeSignature};
         use crate::timeline::TimelineSegment;
-        
+
         let dir = tempdir().unwrap();
         let file_path = dir.path().join("timeline_test.beatr");
 
         // Create project with timeline segments
         let mut project = Project::new("Timeline Test".to_string());
-        
+
         // Create patterns
         let mut kick_pattern = Pattern::new("Kick".to_string(), "kick".to_string(), 16);
         kick_pattern.steps[0].active = true;
         kick_pattern.steps[4].active = true;
         kick_pattern.steps[8].active = true;
         kick_pattern.steps[12].active = true;
-        
+
         let mut snare_pattern = Pattern::new("Snare".to_string(), "snare".to_string(), 16);
         snare_pattern.steps[4].active = true;
         snare_pattern.steps[12].active = true;
-        
+
         let patterns = vec![kick_pattern, snare_pattern];
-        
+
         // Create timeline segment
         let segment = TimelineSegment::new(
             "Test Pattern".to_string(),
@@ -237,11 +287,11 @@ mod tests {
             0.0,
             2, // 2 loops
             TimeSignature::four_four(),
-            130.0 // 130 BPM
+            130.0, // 130 BPM
         );
-        
+
         project.timeline.add_segment(segment);
-        
+
         // Save project
         project.save_to_file(&file_path).unwrap();
 
@@ -250,13 +300,13 @@ mod tests {
 
         // Verify timeline data integrity
         assert_eq!(loaded_project.timeline.segments.len(), 1);
-        
+
         let loaded_segment = &loaded_project.timeline.segments[0];
         assert_eq!(loaded_segment.pattern_id, "Test Pattern");
         assert_eq!(loaded_segment.bpm, 130.0);
         assert_eq!(loaded_segment.loop_count, 2);
         assert_eq!(loaded_segment.patterns.len(), 2);
-        
+
         // Verify pattern data
         let loaded_kick = &loaded_segment.patterns[0];
         assert_eq!(loaded_kick.name, "Kick");
@@ -264,7 +314,7 @@ mod tests {
         assert!(loaded_kick.steps[0].active);
         assert!(loaded_kick.steps[4].active);
         assert!(!loaded_kick.steps[1].active);
-        
+
         let loaded_snare = &loaded_segment.patterns[1];
         assert_eq!(loaded_snare.name, "Snare");
         assert_eq!(loaded_snare.sample_name, "snare");
@@ -284,7 +334,7 @@ mod tests {
         project.update_metadata(
             Some("Updated Project Name".to_string()),
             Some("Test Author".to_string()),
-            Some("Test description for serialization".to_string())
+            Some("Test description for serialization".to_string()),
         );
         project.global_bpm = 140.0;
         project.global_volume = 0.8;
@@ -295,11 +345,17 @@ mod tests {
 
         // Verify metadata
         assert_eq!(loaded_project.metadata.name, "Updated Project Name");
-        assert_eq!(loaded_project.metadata.author, Some("Test Author".to_string()));
-        assert_eq!(loaded_project.metadata.description, Some("Test description for serialization".to_string()));
+        assert_eq!(
+            loaded_project.metadata.author,
+            Some("Test Author".to_string())
+        );
+        assert_eq!(
+            loaded_project.metadata.description,
+            Some("Test description for serialization".to_string())
+        );
         assert_eq!(loaded_project.global_bpm, 140.0);
         assert_eq!(loaded_project.global_volume, 0.8);
-        
+
         // Verify timestamps exist
         assert!(!loaded_project.metadata.created_at.is_empty());
         assert!(!loaded_project.metadata.modified_at.is_empty());

@@ -1,7 +1,7 @@
+use crate::audio::{sequencer::Pattern, TimeSignature};
+use crate::timeline::{PlaybackState, Timeline, TimelineSegment};
 use eframe::egui;
 use std::sync::{Arc, Mutex};
-use crate::timeline::{Timeline, TimelineSegment, PlaybackState};
-use crate::audio::{TimeSignature, sequencer::Pattern};
 
 // Theme-aware color helper functions for timeline view
 fn get_timeline_bg_color(visuals: &egui::Visuals) -> egui::Color32 {
@@ -46,19 +46,31 @@ fn get_segment_boundary_color(visuals: &egui::Visuals) -> egui::Color32 {
 
 fn get_selected_segment_colors(visuals: &egui::Visuals) -> (egui::Color32, egui::Color32) {
     if visuals.dark_mode {
-        (egui::Color32::from_rgb(100, 140, 220), egui::Color32::from_rgb(140, 180, 255))
+        (
+            egui::Color32::from_rgb(100, 140, 220),
+            egui::Color32::from_rgb(140, 180, 255),
+        )
     } else {
         // Better contrast for light theme: darker blue fill with darker border
-        (egui::Color32::from_rgb(120, 160, 240), egui::Color32::from_rgb(80, 120, 200))
+        (
+            egui::Color32::from_rgb(120, 160, 240),
+            egui::Color32::from_rgb(80, 120, 200),
+        )
     }
 }
 
 fn get_unselected_segment_colors(visuals: &egui::Visuals) -> (egui::Color32, egui::Color32) {
     if visuals.dark_mode {
-        (egui::Color32::from_rgb(60, 80, 120), egui::Color32::from_rgb(100, 120, 160))
+        (
+            egui::Color32::from_rgb(60, 80, 120),
+            egui::Color32::from_rgb(100, 120, 160),
+        )
     } else {
         // Better contrast for light theme: medium gray with darker border
-        (egui::Color32::from_rgb(200, 210, 220), egui::Color32::from_rgb(140, 160, 180))
+        (
+            egui::Color32::from_rgb(200, 210, 220),
+            egui::Color32::from_rgb(140, 160, 180),
+        )
     }
 }
 
@@ -80,14 +92,13 @@ fn get_time_sig_unselected_color(visuals: &egui::Visuals) -> egui::Color32 {
 
 pub struct TimelineView {
     timeline: Arc<Mutex<Timeline>>,
-    zoom_level: f32,           // Pixels per second
+    zoom_level: f32, // Pixels per second
     selected_segment: Option<String>,
     scroll_position: f32,      // Horizontal scroll in seconds
     segment_counter: usize,    // Counter for unique segment names
     rename_text: String,       // Text input for renaming
     snap_preview: Option<f64>, // Preview position for snapping
 }
-
 
 impl TimelineView {
     pub fn new(timeline: Arc<Mutex<Timeline>>) -> Self {
@@ -102,7 +113,12 @@ impl TimelineView {
         }
     }
 
-    pub fn show(&mut self, ui: &mut egui::Ui, timeline: &Arc<Mutex<Timeline>>, global_bpm: f32) -> bool {
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        timeline: &Arc<Mutex<Timeline>>,
+        global_bpm: f32,
+    ) -> bool {
         let mut changed = false;
 
         // Flattened timeline controls - single horizontal layout like transport controls
@@ -177,13 +193,16 @@ impl TimelineView {
                     ui.separator();
 
                     ui.label("BPM:");
-                    if ui.add(egui::DragValue::new(&mut bpm)
-                        .range(60.0..=300.0)
-                        .speed(1.0)
-                        .prefix("♩ ")
-                        .suffix(" BPM")
-                        .min_decimals(0)
-                        .max_decimals(0))
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut bpm)
+                                .range(60.0..=300.0)
+                                .speed(1.0)
+                                .prefix("♩ ")
+                                .suffix(" BPM")
+                                .min_decimals(0)
+                                .max_decimals(0),
+                        )
                         .changed()
                     {
                         self.adjust_segment_bpm(&selected_id, bpm);
@@ -231,13 +250,11 @@ impl TimelineView {
 
                     for (label, preset_ts) in &presets {
                         let is_selected = time_sig == *preset_ts;
-                        let button = egui::Button::new(*label)
-                            .small()
-                            .fill(if is_selected {
-                                get_time_sig_selected_color(&ui.visuals())
-                            } else {
-                                get_time_sig_unselected_color(&ui.visuals())
-                            });
+                        let button = egui::Button::new(*label).small().fill(if is_selected {
+                            get_time_sig_selected_color(&ui.visuals())
+                        } else {
+                            get_time_sig_unselected_color(&ui.visuals())
+                        });
 
                         if ui.add(button).clicked() && !is_selected {
                             self.adjust_segment_time_signature(&selected_id, *preset_ts);
@@ -249,7 +266,10 @@ impl TimelineView {
                 // Segment renaming if selected - direct placement
                 let current_name = {
                     if let Ok(timeline) = self.timeline.lock() {
-                        timeline.get_segment(&selected_id).map(|s| s.pattern_id.clone()).unwrap_or_default()
+                        timeline
+                            .get_segment(&selected_id)
+                            .map(|s| s.pattern_id.clone())
+                            .unwrap_or_default()
                     } else {
                         String::new()
                     }
@@ -289,7 +309,7 @@ impl TimelineView {
         // Create scrollable timeline area
         let timeline_rect = egui::Rect::from_min_size(
             available_rect.min,
-            egui::Vec2::new(available_rect.width(), timeline_height)
+            egui::Vec2::new(available_rect.width(), timeline_height),
         );
 
         // Draw timeline with scrolling support
@@ -298,7 +318,12 @@ impl TimelineView {
         changed
     }
 
-    fn draw_scrollable_timeline(&mut self, ui: &mut egui::Ui, rect: egui::Rect, _timeline: &Arc<Mutex<Timeline>>) {
+    fn draw_scrollable_timeline(
+        &mut self,
+        ui: &mut egui::Ui,
+        rect: egui::Rect,
+        _timeline: &Arc<Mutex<Timeline>>,
+    ) {
         // Get timeline data
         let (segments, current_position, playback_state, total_duration) = {
             if let Ok(timeline) = self.timeline.lock() {
@@ -333,15 +358,19 @@ impl TimelineView {
         let scroll_offset_pixels = self.scroll_position * self.zoom_level;
         let content_rect = egui::Rect::from_min_size(
             egui::Pos2::new(rect.min.x - scroll_offset_pixels, rect.min.y),
-            egui::Vec2::new(timeline_width, rect.height())
+            egui::Vec2::new(timeline_width, rect.height()),
         );
 
         let painter = ui.painter();
 
-        // Background - fill entire viewport  
+        // Background - fill entire viewport
         let visuals = ui.ctx().style().visuals.clone();
         painter.rect_filled(rect, 4.0, get_timeline_bg_color(&visuals));
-        painter.rect_stroke(rect, 4.0, egui::Stroke::new(1.0, get_timeline_stroke_color(&visuals)));
+        painter.rect_stroke(
+            rect,
+            4.0,
+            egui::Stroke::new(1.0, get_timeline_stroke_color(&visuals)),
+        );
 
         // Time ruler - pass both viewport and content rects for proper positioning
         self.draw_time_ruler(&painter, rect, content_rect, ui);
@@ -359,14 +388,17 @@ impl TimelineView {
             let snap_x = rect.min.x + ((snap_time as f32 - self.scroll_position) * self.zoom_level);
             if snap_x >= rect.min.x && snap_x <= rect.max.x {
                 painter.line_segment(
-                    [egui::Pos2::new(snap_x, rect.min.y + 25.0), egui::Pos2::new(snap_x, rect.max.y)],
-                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 255, 100))
+                    [
+                        egui::Pos2::new(snap_x, rect.min.y + 25.0),
+                        egui::Pos2::new(snap_x, rect.max.y),
+                    ],
+                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 255, 100)),
                 );
                 // Add snap indicator at the top
                 painter.circle_filled(
                     egui::Pos2::new(snap_x, rect.min.y + 30.0),
                     4.0,
-                    egui::Color32::from_rgb(100, 255, 100)
+                    egui::Color32::from_rgb(100, 255, 100),
                 );
             }
         }
@@ -374,12 +406,16 @@ impl TimelineView {
         // Playback position indicator
         if playback_state == PlaybackState::Playing || playback_state == PlaybackState::Paused {
             // Calculate position in viewport coordinates, accounting for scroll
-            let pos_x = rect.min.x + ((current_position as f32 - self.scroll_position) * self.zoom_level);
+            let pos_x =
+                rect.min.x + ((current_position as f32 - self.scroll_position) * self.zoom_level);
             // Only draw if visible in viewport
             if pos_x >= rect.min.x && pos_x <= rect.max.x {
                 painter.line_segment(
-                    [egui::Pos2::new(pos_x, rect.min.y), egui::Pos2::new(pos_x, rect.max.y)],
-                    egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 100, 100))
+                    [
+                        egui::Pos2::new(pos_x, rect.min.y),
+                        egui::Pos2::new(pos_x, rect.max.y),
+                    ],
+                    egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 100, 100)),
                 );
             }
         }
@@ -399,18 +435,30 @@ impl TimelineView {
         }
     }
 
-    fn draw_time_ruler(&self, painter: &egui::Painter, viewport_rect: egui::Rect, _content_rect: egui::Rect, ui: &egui::Ui) {
+    fn draw_time_ruler(
+        &self,
+        painter: &egui::Painter,
+        viewport_rect: egui::Rect,
+        _content_rect: egui::Rect,
+        ui: &egui::Ui,
+    ) {
         let ruler_height = 20.0;
         let ruler_rect = egui::Rect::from_min_size(
             viewport_rect.min,
-            egui::Vec2::new(viewport_rect.width(), ruler_height)
+            egui::Vec2::new(viewport_rect.width(), ruler_height),
         );
 
         // Ruler background
         painter.rect_filled(ruler_rect, 0.0, get_ruler_bg_color(&ui.visuals()));
 
         // Time marks based on current scroll position and zoom
-        let seconds_per_mark = if self.zoom_level > 100.0 { 0.5 } else if self.zoom_level > 50.0 { 1.0 } else { 2.0 };
+        let seconds_per_mark = if self.zoom_level > 100.0 {
+            0.5
+        } else if self.zoom_level > 50.0 {
+            1.0
+        } else {
+            2.0
+        };
 
         // Calculate visible time range based on scroll position
         let start_second = self.scroll_position;
@@ -419,18 +467,30 @@ impl TimelineView {
         let mut current_second = (start_second / seconds_per_mark).floor() * seconds_per_mark;
         while current_second <= end_second {
             // Calculate x position relative to viewport, accounting for scroll
-            let x = viewport_rect.min.x + ((current_second - self.scroll_position) * self.zoom_level);
+            let x =
+                viewport_rect.min.x + ((current_second - self.scroll_position) * self.zoom_level);
 
             // Only draw marks that are visible in the viewport
             if x >= viewport_rect.min.x && x <= viewport_rect.max.x {
                 // Major marks every few seconds
                 let is_major = (current_second % 4.0).abs() < 0.01;
-                let mark_height = if is_major { ruler_height * 0.8 } else { ruler_height * 0.5 };
-                let color = if is_major { egui::Color32::WHITE } else { egui::Color32::GRAY };
+                let mark_height = if is_major {
+                    ruler_height * 0.8
+                } else {
+                    ruler_height * 0.5
+                };
+                let color = if is_major {
+                    egui::Color32::WHITE
+                } else {
+                    egui::Color32::GRAY
+                };
 
                 painter.line_segment(
-                    [egui::Pos2::new(x, ruler_rect.max.y - mark_height), egui::Pos2::new(x, ruler_rect.max.y)],
-                    egui::Stroke::new(1.0, color)
+                    [
+                        egui::Pos2::new(x, ruler_rect.max.y - mark_height),
+                        egui::Pos2::new(x, ruler_rect.max.y),
+                    ],
+                    egui::Stroke::new(1.0, color),
                 );
 
                 // Time labels on major marks (only if positive time)
@@ -450,7 +510,13 @@ impl TimelineView {
     }
 
     // Pattern preview generation utility
-    fn generate_pattern_preview(&self, segment: &TimelineSegment, preview_width: f32, preview_height: f32, visuals: &egui::Visuals) -> Vec<(egui::Pos2, egui::Color32)> {
+    fn generate_pattern_preview(
+        &self,
+        segment: &TimelineSegment,
+        preview_width: f32,
+        preview_height: f32,
+        visuals: &egui::Visuals,
+    ) -> Vec<(egui::Pos2, egui::Color32)> {
         let mut preview_elements = Vec::new();
 
         if segment.patterns.is_empty() {
@@ -472,14 +538,14 @@ impl TimelineView {
         } else {
             // Darker, more contrasted colors for light theme
             [
-                egui::Color32::from_rgb(180, 40, 40),   // Kick - dark red
-                egui::Color32::from_rgb(40, 80, 180),   // Snare - dark blue
-                egui::Color32::from_rgb(180, 160, 40),  // Hi-Hat - dark yellow
-                egui::Color32::from_rgb(200, 100, 40),  // Crash - dark orange
-                egui::Color32::from_rgb(80, 160, 40),   // Open Hi-Hat - dark green
-                egui::Color32::from_rgb(180, 40, 180),  // Clap - dark magenta
-                egui::Color32::from_rgb(120, 40, 180),  // Rim Shot - dark purple
-                egui::Color32::from_rgb(40, 140, 120),  // Tom - dark teal
+                egui::Color32::from_rgb(180, 40, 40),  // Kick - dark red
+                egui::Color32::from_rgb(40, 80, 180),  // Snare - dark blue
+                egui::Color32::from_rgb(180, 160, 40), // Hi-Hat - dark yellow
+                egui::Color32::from_rgb(200, 100, 40), // Crash - dark orange
+                egui::Color32::from_rgb(80, 160, 40),  // Open Hi-Hat - dark green
+                egui::Color32::from_rgb(180, 40, 180), // Clap - dark magenta
+                egui::Color32::from_rgb(120, 40, 180), // Rim Shot - dark purple
+                egui::Color32::from_rgb(40, 140, 120), // Tom - dark teal
             ]
         };
 
@@ -489,7 +555,9 @@ impl TimelineView {
         let pattern_height = preview_height / segment.patterns.len() as f32;
 
         for (pattern_idx, pattern) in segment.patterns.iter().enumerate() {
-            let color = pattern_colors.get(pattern_idx).unwrap_or(&egui::Color32::GRAY);
+            let color = pattern_colors
+                .get(pattern_idx)
+                .unwrap_or(&egui::Color32::GRAY);
             let y_offset = pattern_idx as f32 * pattern_height;
 
             // Draw pattern repeated for each loop
@@ -502,7 +570,8 @@ impl TimelineView {
                         let size = (step_width * 0.5).min(pattern_height * 0.5).max(1.0);
 
                         preview_elements.push((egui::Pos2::new(x, y), *color));
-                        preview_elements.push((egui::Pos2::new(x + size, y + size), *color)); // Store size in second point
+                        preview_elements.push((egui::Pos2::new(x + size, y + size), *color));
+                        // Store size in second point
                     }
                 }
             }
@@ -543,7 +612,8 @@ impl TimelineView {
         let truncated = if max_chars < text.len() {
             let substr = &text[..max_chars.min(text.len())];
             if let Some(last_space) = substr.rfind(' ') {
-                if last_space > max_chars / 2 { // Only break at word if it's not too early
+                if last_space > max_chars / 2 {
+                    // Only break at word if it's not too early
                     &text[..last_space]
                 } else {
                     substr
@@ -559,7 +629,11 @@ impl TimelineView {
     }
 
     // Calculate appropriate font size and content for segment width
-    fn calculate_segment_text_display(&self, segment: &TimelineSegment, segment_width: f32) -> (String, f32) {
+    fn calculate_segment_text_display(
+        &self,
+        segment: &TimelineSegment,
+        segment_width: f32,
+    ) -> (String, f32) {
         let base_font_size = 11.0;
         let min_font_size = 8.0;
         let max_font_size = 14.0;
@@ -592,19 +666,37 @@ impl TimelineView {
                 let loop_part = format!(" ({})", segment.loop_count);
                 let loop_width = self.measure_text_width(&loop_part, font_size);
 
-                if loop_width < available_width * 0.3 { // Reserve 30% for loop count
+                if loop_width < available_width * 0.3 {
+                    // Reserve 30% for loop count
                     let name_width = available_width - loop_width;
-                    let truncated_name = self.truncate_text_with_ellipses(&segment.pattern_id, name_width, font_size);
+                    let truncated_name = self.truncate_text_with_ellipses(
+                        &segment.pattern_id,
+                        name_width,
+                        font_size,
+                    );
                     (format!("{}{}", truncated_name, loop_part), font_size)
                 } else {
                     // Just the name, truncated
-                    (self.truncate_text_with_ellipses(&segment.pattern_id, available_width, font_size), font_size)
+                    (
+                        self.truncate_text_with_ellipses(
+                            &segment.pattern_id,
+                            available_width,
+                            font_size,
+                        ),
+                        font_size,
+                    )
                 }
             }
         }
     }
 
-    fn draw_segment(&self, painter: &egui::Painter, rect: egui::Rect, segment: &TimelineSegment, ui: &egui::Ui) {
+    fn draw_segment(
+        &self,
+        painter: &egui::Painter,
+        rect: egui::Rect,
+        segment: &TimelineSegment,
+        ui: &egui::Ui,
+    ) {
         let x_start = rect.min.x + (segment.start_time as f32 * self.zoom_level);
         let x_end = rect.min.x + (segment.end_time() as f32 * self.zoom_level);
         let y_start = rect.min.y + 25.0; // Below ruler
@@ -612,7 +704,7 @@ impl TimelineView {
 
         let segment_rect = egui::Rect::from_min_max(
             egui::Pos2::new(x_start, y_start),
-            egui::Pos2::new(x_end, y_start + segment_height)
+            egui::Pos2::new(x_end, y_start + segment_height),
         );
 
         // Only draw if segment is visible
@@ -633,10 +725,15 @@ impl TimelineView {
 
         // Draw segment rectangle
         painter.rect_filled(segment_rect, 4.0, fill_color);
-        painter.rect_stroke(segment_rect, 4.0, egui::Stroke::new(stroke_width, stroke_color));
+        painter.rect_stroke(
+            segment_rect,
+            4.0,
+            egui::Stroke::new(stroke_width, stroke_color),
+        );
 
         // Calculate adaptive text content and sizing
-        let (text_content, font_size) = self.calculate_segment_text_display(segment, segment_rect.width());
+        let (text_content, font_size) =
+            self.calculate_segment_text_display(segment, segment_rect.width());
 
         // Pattern preview visualization (above text)
         let preview_area_height = (segment_rect.height() * 0.4).min(30.0); // 40% of segment height, max 30px
@@ -644,13 +741,18 @@ impl TimelineView {
         let preview_width = segment_rect.width() - 8.0; // 4px margin on each side
 
         if segment_rect.width() > 40.0 && preview_area_height > 8.0 {
-            let preview_elements = self.generate_pattern_preview(segment, preview_width, preview_area_height - 4.0, &visuals);
+            let preview_elements = self.generate_pattern_preview(
+                segment,
+                preview_width,
+                preview_area_height - 4.0,
+                &visuals,
+            );
 
             for chunk in preview_elements.chunks(2) {
                 if chunk.len() == 2 {
                     let pos = egui::Pos2::new(
                         segment_rect.min.x + 4.0 + chunk[0].0.x,
-                        preview_y_offset + chunk[0].0.y
+                        preview_y_offset + chunk[0].0.y,
                     );
                     let size = chunk[1].0.x - chunk[0].0.x; // Size stored in second point's x
                     let color = chunk[0].1;
@@ -658,7 +760,7 @@ impl TimelineView {
                     painter.rect_filled(
                         egui::Rect::from_min_size(pos, egui::Vec2::splat(size)),
                         1.0,
-                        color
+                        color,
                     );
                 }
             }
@@ -678,7 +780,6 @@ impl TimelineView {
             egui::FontId::proportional(font_size),
             egui::Color32::WHITE,
         );
-
     }
 
     fn calculate_snap_time(&self, time: f64, exclude_segment_id: Option<&str>) -> f64 {
@@ -700,9 +801,17 @@ impl TimelineView {
         }
 
         // Add regular grid snap points
-        let snap_interval = if self.zoom_level > 100.0 { 0.25 } // 1/4 second
-        else if self.zoom_level > 50.0 { 0.5 }  // 1/2 second
-        else { 1.0 }; // 1 second
+        let snap_interval = if self.zoom_level > 100.0 {
+            0.25
+        }
+        // 1/4 second
+        else if self.zoom_level > 50.0 {
+            0.5
+        }
+        // 1/2 second
+        else {
+            1.0
+        }; // 1 second
 
         // Generate grid points around the target time
         let grid_start = (time / snap_interval).floor() * snap_interval;
@@ -721,7 +830,8 @@ impl TimelineView {
         snap_points.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         // Find the closest snap point to the target time
-        let closest_snap = snap_points.iter()
+        let closest_snap = snap_points
+            .iter()
             .min_by(|a, b| {
                 let dist_a = (time - **a).abs();
                 let dist_b = (time - **b).abs();
@@ -734,9 +844,13 @@ impl TimelineView {
 
     fn draw_snap_grid(&self, painter: &egui::Painter, rect: egui::Rect, ui: &egui::Ui) {
         // Draw subtle grid lines for regular snap points
-        let snap_interval = if self.zoom_level > 100.0 { 0.25f64 }
-        else if self.zoom_level > 50.0 { 0.5f64 }
-        else { 1.0f64 };
+        let snap_interval = if self.zoom_level > 100.0 {
+            0.25f64
+        } else if self.zoom_level > 50.0 {
+            0.5f64
+        } else {
+            1.0f64
+        };
 
         let start_time = 0.0f64;
         let end_time = rect.width() as f64 / self.zoom_level as f64;
@@ -747,8 +861,11 @@ impl TimelineView {
 
             // Draw very subtle grid lines for regular intervals
             painter.line_segment(
-                [egui::Pos2::new(x, rect.min.y + 25.0), egui::Pos2::new(x, rect.max.y)],
-                egui::Stroke::new(0.5, get_grid_line_color(&ui.visuals()))
+                [
+                    egui::Pos2::new(x, rect.min.y + 25.0),
+                    egui::Pos2::new(x, rect.max.y),
+                ],
+                egui::Stroke::new(0.5, get_grid_line_color(&ui.visuals())),
             );
 
             current_time += snap_interval;
@@ -761,8 +878,11 @@ impl TimelineView {
                 let start_x = rect.min.x + (segment.start_time as f32 * self.zoom_level);
                 if start_x >= rect.min.x && start_x <= rect.max.x {
                     painter.line_segment(
-                        [egui::Pos2::new(start_x, rect.min.y + 25.0), egui::Pos2::new(start_x, rect.max.y)],
-                        egui::Stroke::new(1.0, get_segment_boundary_color(&ui.visuals()))
+                        [
+                            egui::Pos2::new(start_x, rect.min.y + 25.0),
+                            egui::Pos2::new(start_x, rect.max.y),
+                        ],
+                        egui::Stroke::new(1.0, get_segment_boundary_color(&ui.visuals())),
                     );
                 }
 
@@ -770,24 +890,35 @@ impl TimelineView {
                 let end_x = rect.min.x + (segment.end_time() as f32 * self.zoom_level);
                 if end_x >= rect.min.x && end_x <= rect.max.x {
                     painter.line_segment(
-                        [egui::Pos2::new(end_x, rect.min.y + 25.0), egui::Pos2::new(end_x, rect.max.y)],
-                        egui::Stroke::new(1.0, get_segment_boundary_color(&ui.visuals()))
+                        [
+                            egui::Pos2::new(end_x, rect.min.y + 25.0),
+                            egui::Pos2::new(end_x, rect.max.y),
+                        ],
+                        egui::Stroke::new(1.0, get_segment_boundary_color(&ui.visuals())),
                     );
                 }
             }
         }
     }
 
-    fn handle_mouse_interaction(&mut self, response: &egui::Response, viewport_rect: egui::Rect, _content_rect: egui::Rect) {
+    fn handle_mouse_interaction(
+        &mut self,
+        response: &egui::Response,
+        viewport_rect: egui::Rect,
+        _content_rect: egui::Rect,
+    ) {
         if response.clicked() {
             if let Some(pos) = response.interact_pointer_pos() {
                 // Convert mouse position to timeline time, accounting for scroll
-                let timeline_time = ((pos.x - viewport_rect.min.x) / self.zoom_level + self.scroll_position) as f64;
+                let timeline_time =
+                    ((pos.x - viewport_rect.min.x) / self.zoom_level + self.scroll_position) as f64;
 
                 // Find segment at this position
                 let found_segment = {
                     if let Ok(timeline) = self.timeline.lock() {
-                        timeline.segments.iter()
+                        timeline
+                            .segments
+                            .iter()
                             .find(|s| s.contains_time(timeline_time))
                             .map(|s| s.id.clone())
                     } else {
@@ -804,7 +935,10 @@ impl TimelineView {
                     self.selected_segment = None;
 
                     #[cfg(debug_assertions)]
-                    eprintln!("DEBUG: No segment found at time {:.2}s, creating new segment", timeline_time);
+                    eprintln!(
+                        "DEBUG: No segment found at time {:.2}s, creating new segment",
+                        timeline_time
+                    );
 
                     // Add new segment at clicked position (we'll use 120.0 as default BPM for user-created segments)
                     self.add_segment_at_position(timeline_time, 120.0);
@@ -816,7 +950,9 @@ impl TimelineView {
         if response.dragged() {
             if let Some(selected_id) = &self.selected_segment {
                 if let Some(pos) = response.interact_pointer_pos() {
-                    let raw_time = ((pos.x - viewport_rect.min.x) / self.zoom_level + self.scroll_position).max(0.0) as f64;
+                    let raw_time = ((pos.x - viewport_rect.min.x) / self.zoom_level
+                        + self.scroll_position)
+                        .max(0.0) as f64;
 
                     // Check if Alt key is held to disable snapping
                     let alt_held = response.ctx.input(|i| i.modifiers.alt);
@@ -846,7 +982,8 @@ impl TimelineView {
         // Handle seeking on playback position (only when no segment is selected)
         if response.clicked() && self.selected_segment.is_none() {
             if let Some(pos) = response.interact_pointer_pos() {
-                let timeline_time = ((pos.x - viewport_rect.min.x) / self.zoom_level + self.scroll_position) as f64;
+                let timeline_time =
+                    ((pos.x - viewport_rect.min.x) / self.zoom_level + self.scroll_position) as f64;
                 if let Ok(mut timeline) = self.timeline.lock() {
                     timeline.seek(timeline_time);
                 }
@@ -860,13 +997,35 @@ impl TimelineView {
         self.segment_counter += 1;
 
         // Create a full set of empty patterns for all tracks
-        let pattern_names = vec!["Kick", "Snare", "Hi-Hat", "Crash", "Open Hi-Hat", "Clap", "Rim Shot", "Tom"];
-        let pattern_samples = vec!["kick", "snare", "hihat", "crash", "open_hihat", "clap", "rimshot", "tom"];
+        let pattern_names = vec![
+            "Kick",
+            "Snare",
+            "Hi-Hat",
+            "Crash",
+            "Open Hi-Hat",
+            "Clap",
+            "Rim Shot",
+            "Tom",
+        ];
+        let pattern_samples = vec![
+            "kick",
+            "snare",
+            "hihat",
+            "crash",
+            "open_hihat",
+            "clap",
+            "rimshot",
+            "tom",
+        ];
 
-        let patterns: Vec<Pattern> = pattern_names.iter().zip(pattern_samples.iter()).map(|(name, sample)| {
-            // Create completely empty patterns - no default steps
-            Pattern::new(name.to_string(), sample.to_string(), 16)
-        }).collect();
+        let patterns: Vec<Pattern> = pattern_names
+            .iter()
+            .zip(pattern_samples.iter())
+            .map(|(name, sample)| {
+                // Create completely empty patterns - no default steps
+                Pattern::new(name.to_string(), sample.to_string(), 16)
+            })
+            .collect();
 
         let segment = TimelineSegment::new(
             segment_name,
@@ -895,12 +1054,18 @@ impl TimelineView {
                     self.segment_counter += 1;
 
                     // Clone all patterns and update their names
-                    let new_patterns = original.patterns.iter().map(|p| {
-                        let mut new_pattern = p.clone();
-                        // Update the pattern name to reflect the new segment
-                        new_pattern.name = new_pattern.name.replace(&original.pattern_id, &segment_name);
-                        new_pattern
-                    }).collect();
+                    let new_patterns = original
+                        .patterns
+                        .iter()
+                        .map(|p| {
+                            let mut new_pattern = p.clone();
+                            // Update the pattern name to reflect the new segment
+                            new_pattern.name = new_pattern
+                                .name
+                                .replace(&original.pattern_id, &segment_name);
+                            new_pattern
+                        })
+                        .collect();
 
                     let new_segment = TimelineSegment::new(
                         segment_name,
@@ -935,7 +1100,8 @@ impl TimelineView {
 
                             // Update all pattern names in the new segment
                             for pattern in &mut new_segment.patterns {
-                                pattern.name = pattern.name.replace(&new_segment.pattern_id, &segment_name);
+                                pattern.name =
+                                    pattern.name.replace(&new_segment.pattern_id, &segment_name);
                             }
                         }
                         self.selected_segment = Some(new_id);
@@ -970,7 +1136,11 @@ impl TimelineView {
         }
     }
 
-    fn adjust_segment_time_signature(&mut self, segment_id: &str, new_time_signature: crate::audio::TimeSignature) {
+    fn adjust_segment_time_signature(
+        &mut self,
+        segment_id: &str,
+        new_time_signature: crate::audio::TimeSignature,
+    ) {
         if let Ok(mut timeline) = self.timeline.lock() {
             if let Some(segment) = timeline.get_segment_mut(segment_id) {
                 segment.set_time_signature(new_time_signature);
@@ -1030,10 +1200,13 @@ impl TimelineView {
             println!("   Format: WAV (simulated)");
 
             for (i, segment) in timeline.segments.iter().enumerate() {
-                let active_steps: usize = segment.patterns.iter()
+                let active_steps: usize = segment
+                    .patterns
+                    .iter()
                     .map(|p| p.steps.iter().filter(|s| s.active).count())
                     .sum();
-                println!("   Segment {}: {} ({:.1}s-{:.1}s) - {} loops, {} active steps",
+                println!(
+                    "   Segment {}: {} ({:.1}s-{:.1}s) - {} loops, {} active steps",
                     i + 1,
                     segment.pattern_id,
                     segment.start_time,
@@ -1160,8 +1333,12 @@ mod tests {
 
         // Test snapping near segment end
         let snap_result = timeline_view.calculate_snap_time(expected_end - 0.1, None);
-        assert!((snap_result - expected_end).abs() < 0.01,
-               "Expected snap to {}, got {}", expected_end, snap_result);
+        assert!(
+            (snap_result - expected_end).abs() < 0.01,
+            "Expected snap to {}, got {}",
+            expected_end,
+            snap_result
+        );
 
         println!("✅ Timeline view segment boundary snapping test passed");
     }
@@ -1173,8 +1350,8 @@ mod tests {
         let mut timeline_view = TimelineView::new(timeline.clone());
 
         // Add segments to create timeline content
-        timeline_view.add_segment_at_position(0.0, 120.0);  // 0-4s
-        timeline_view.add_segment_at_position(5.0, 120.0);  // 5-9s
+        timeline_view.add_segment_at_position(0.0, 120.0); // 0-4s
+        timeline_view.add_segment_at_position(5.0, 120.0); // 5-9s
         timeline_view.add_segment_at_position(10.0, 120.0); // 10-14s
 
         timeline_view.zoom_level = 50.0; // 50 pixels per second
@@ -1201,19 +1378,25 @@ mod tests {
 
         // Test clamping to minimum boundary
         timeline_view.scroll_position = -1000.0; // Way past minimum
-        // Simulate the boundary clamping that happens in draw_scrollable_timeline
-        timeline_view.scroll_position = timeline_view.scroll_position.clamp(expected_min_scroll, expected_max_scroll);
+                                                 // Simulate the boundary clamping that happens in draw_scrollable_timeline
+        timeline_view.scroll_position = timeline_view
+            .scroll_position
+            .clamp(expected_min_scroll, expected_max_scroll);
         assert!((timeline_view.scroll_position - expected_min_scroll).abs() < 0.01);
 
         // Test clamping to maximum boundary
         timeline_view.scroll_position = 1000.0; // Way past maximum
-        timeline_view.scroll_position = timeline_view.scroll_position.clamp(expected_min_scroll, expected_max_scroll);
+        timeline_view.scroll_position = timeline_view
+            .scroll_position
+            .clamp(expected_min_scroll, expected_max_scroll);
         assert!((timeline_view.scroll_position - expected_max_scroll).abs() < 0.01);
 
         // Test valid scroll position (use a position we know is within bounds)
         let valid_position = (expected_min_scroll + expected_max_scroll) / 2.0; // Middle position
         timeline_view.scroll_position = valid_position;
-        timeline_view.scroll_position = timeline_view.scroll_position.clamp(expected_min_scroll, expected_max_scroll);
+        timeline_view.scroll_position = timeline_view
+            .scroll_position
+            .clamp(expected_min_scroll, expected_max_scroll);
         assert!((timeline_view.scroll_position - valid_position).abs() < 0.01);
 
         println!("✅ Timeline view scrolling boundaries test passed");
@@ -1236,7 +1419,8 @@ mod tests {
         // Test with scroll offset
         timeline_view.scroll_position = 10.0;
         let visible_start_time = timeline_view.scroll_position;
-        let visible_end_time = timeline_view.scroll_position + (viewport_width / timeline_view.zoom_level);
+        let visible_end_time =
+            timeline_view.scroll_position + (viewport_width / timeline_view.zoom_level);
         assert!((visible_start_time - 10.0).abs() < 0.01);
         assert!((visible_end_time - 15.0).abs() < 0.01);
 
@@ -1254,14 +1438,16 @@ mod tests {
 
         // Simulate mouse position conversion
         let viewport_x = 100.0; // Mouse at 100 pixels from viewport left
-        let timeline_time = (viewport_x / timeline_view.zoom_level + timeline_view.scroll_position) as f64;
+        let timeline_time =
+            (viewport_x / timeline_view.zoom_level + timeline_view.scroll_position) as f64;
 
         // Expected: 100px / 50px/s + 5s = 2s + 5s = 7s
         assert!((timeline_time - 7.0).abs() < 0.01);
 
         // Test with zero scroll
         timeline_view.scroll_position = 0.0;
-        let timeline_time_no_scroll = (viewport_x / timeline_view.zoom_level + timeline_view.scroll_position) as f64;
+        let timeline_time_no_scroll =
+            (viewport_x / timeline_view.zoom_level + timeline_view.scroll_position) as f64;
         // Expected: 100px / 50px/s + 0s = 2s
         assert!((timeline_time_no_scroll - 2.0).abs() < 0.01);
 
@@ -1270,7 +1456,10 @@ mod tests {
 
     #[test]
     fn test_pattern_preview_generation() {
-        use crate::audio::{TimeSignature, sequencer::{Pattern, Step}};
+        use crate::audio::{
+            sequencer::{Pattern, Step},
+            TimeSignature,
+        };
 
         // Create a timeline view
         let timeline = Arc::new(Mutex::new(Timeline::new()));
@@ -1300,7 +1489,12 @@ mod tests {
         let preview_width = 100.0;
         let preview_height = 20.0;
         let visuals = egui::Visuals::dark(); // Use dark theme for test
-        let preview_elements = timeline_view.generate_pattern_preview(&segment, preview_width, preview_height, &visuals);
+        let preview_elements = timeline_view.generate_pattern_preview(
+            &segment,
+            preview_width,
+            preview_height,
+            &visuals,
+        );
 
         // Should have elements for active steps repeated for each loop
         // kick: 3 steps * 2 loops = 6, snare: 2 steps * 2 loops = 4, total = 10 active steps
@@ -1310,7 +1504,10 @@ mod tests {
         // Verify first element (kick pattern, step 0)
         assert!(preview_elements[0].0.x >= 0.0);
         assert!(preview_elements[0].0.y >= 0.0);
-        assert_eq!(preview_elements[0].1, egui::Color32::from_rgb(255, 100, 100)); // Kick color
+        assert_eq!(
+            preview_elements[0].1,
+            egui::Color32::from_rgb(255, 100, 100)
+        ); // Kick color
 
         println!("✅ Pattern preview generation test passed");
     }
@@ -1349,7 +1546,7 @@ mod tests {
 
     #[test]
     fn test_segment_text_display_calculation() {
-        use crate::audio::{TimeSignature, sequencer::Pattern};
+        use crate::audio::{sequencer::Pattern, TimeSignature};
 
         // Create a timeline view
         let timeline = Arc::new(Mutex::new(Timeline::new()));
@@ -1373,7 +1570,8 @@ mod tests {
         assert_eq!(font_wide, 11.0);
 
         // Test with narrow segment (should truncate)
-        let (text_narrow, font_narrow) = timeline_view.calculate_segment_text_display(&segment, 60.0);
+        let (text_narrow, font_narrow) =
+            timeline_view.calculate_segment_text_display(&segment, 60.0);
         assert!(text_narrow.len() < segment.pattern_id.len() + 5); // Should be shorter than full name + loop count
         assert!(text_narrow.contains("...") || text_narrow.len() < 10); // Either truncated or very short
 
@@ -1387,7 +1585,7 @@ mod tests {
 
     #[test]
     fn test_zoom_adaptive_text_sizing() {
-        use crate::audio::{TimeSignature, sequencer::Pattern};
+        use crate::audio::{sequencer::Pattern, TimeSignature};
 
         // Create a timeline view
         let timeline = Arc::new(Mutex::new(Timeline::new()));
@@ -1438,7 +1636,8 @@ mod tests {
 
         // Generate pattern preview
         let visuals = egui::Visuals::dark(); // Use dark theme for test
-        let preview_elements = timeline_view.generate_pattern_preview(&segment, 100.0, 20.0, &visuals);
+        let preview_elements =
+            timeline_view.generate_pattern_preview(&segment, 100.0, 20.0, &visuals);
 
         // Should return empty vector for segment with no patterns
         assert!(preview_elements.is_empty());
@@ -1448,7 +1647,7 @@ mod tests {
 
     #[test]
     fn test_pattern_preview_loop_count_functionality() {
-        use crate::audio::{TimeSignature, sequencer::Pattern};
+        use crate::audio::{sequencer::Pattern, TimeSignature};
 
         // Create a timeline view
         let timeline = Arc::new(Mutex::new(Timeline::new()));
@@ -1471,7 +1670,9 @@ mod tests {
             120.0,
         );
 
-        let preview_1_loop = timeline_view.generate_pattern_preview(&segment_1_loop, 100.0, 20.0);
+        let mock_visuals = egui::Visuals::dark();
+        let preview_1_loop =
+            timeline_view.generate_pattern_preview(&segment_1_loop, 100.0, 20.0, &mock_visuals);
         // 2 active steps * 1 loop * 2 points each = 4 points
         assert_eq!(preview_1_loop.len(), 4);
 
@@ -1485,7 +1686,8 @@ mod tests {
             120.0,
         );
 
-        let preview_3_loops = timeline_view.generate_pattern_preview(&segment_3_loops, 100.0, 20.0);
+        let preview_3_loops =
+            timeline_view.generate_pattern_preview(&segment_3_loops, 100.0, 20.0, &mock_visuals);
         // 2 active steps * 3 loops * 2 points each = 12 points
         assert_eq!(preview_3_loops.len(), 12);
 
@@ -1493,7 +1695,8 @@ mod tests {
         // First loop should have steps at positions 0 and 2 (out of 12 total steps: 4*3)
         // Second loop should have steps at positions 4 and 6
         // Third loop should have steps at positions 8 and 10
-        let step_positions: Vec<f32> = preview_3_loops.iter()
+        let step_positions: Vec<f32> = preview_3_loops
+            .iter()
             .step_by(2) // Take every other element (skip the size points)
             .map(|(pos, _)| pos.x)
             .collect();
@@ -1507,15 +1710,21 @@ mod tests {
         let step_width = total_width / total_steps as f32;
 
         // Check first step of each loop (step 0, 4, 8)
-        let expected_positions = [0, 4, 8].iter()
+        let expected_positions = [0, 4, 8]
+            .iter()
             .map(|&step| step as f32 * step_width + step_width * 0.25)
             .collect::<Vec<f32>>();
 
         // Verify the first step of each loop is at the expected position
         for (i, &expected_pos) in expected_positions.iter().enumerate() {
             let actual_pos = step_positions[i * 2]; // Every other position (steps 0, 4, 8)
-            assert!((actual_pos - expected_pos).abs() < 0.1,
-                   "Loop {} first step position: expected {}, got {}", i + 1, expected_pos, actual_pos);
+            assert!(
+                (actual_pos - expected_pos).abs() < 0.1,
+                "Loop {} first step position: expected {}, got {}",
+                i + 1,
+                expected_pos,
+                actual_pos
+            );
         }
 
         println!("✅ Pattern preview loop count functionality test passed");
@@ -1523,7 +1732,10 @@ mod tests {
 
     #[test]
     fn test_performance_with_multiple_segments() {
-        use crate::audio::{TimeSignature, sequencer::{Pattern, Step}};
+        use crate::audio::{
+            sequencer::{Pattern, Step},
+            TimeSignature,
+        };
         use std::time::Instant;
 
         // Create a timeline view
@@ -1572,25 +1784,54 @@ mod tests {
         let text_duration = start.elapsed();
 
         // Performance should be reasonable (less than 10ms for 20 segments)
-        assert!(preview_duration.as_millis() < 10, "Pattern preview generation too slow: {}ms", preview_duration.as_millis());
-        assert!(text_duration.as_millis() < 5, "Text calculation too slow: {}ms", text_duration.as_millis());
+        assert!(
+            preview_duration.as_millis() < 10,
+            "Pattern preview generation too slow: {}ms",
+            preview_duration.as_millis()
+        );
+        assert!(
+            text_duration.as_millis() < 5,
+            "Text calculation too slow: {}ms",
+            text_duration.as_millis()
+        );
 
-        println!("✅ Performance test passed - Preview: {}μs, Text: {}μs",
-                preview_duration.as_micros(), text_duration.as_micros());
+        println!(
+            "✅ Performance test passed - Preview: {}μs, Text: {}μs",
+            preview_duration.as_micros(),
+            text_duration.as_micros()
+        );
     }
-    
+
     #[test]
     fn test_all_eight_tracks_display_in_timeline_preview() {
-        use crate::audio::{TimeSignature, sequencer::Pattern};
+        use crate::audio::{sequencer::Pattern, TimeSignature};
         use std::sync::{Arc, Mutex};
-        
+
         let timeline = Arc::new(Mutex::new(crate::timeline::Timeline::new()));
         let timeline_view = TimelineView::new(timeline);
-        
+
         // Create a segment with all 8 tracks including rim shot
-        let track_names = vec!["Kick", "Snare", "Hi-Hat", "Crash", "Open Hi-Hat", "Clap", "Rim Shot", "Tom"];
-        let sample_names = vec!["kick", "snare", "hihat", "crash", "open_hihat", "clap", "rimshot", "tom"];
-        
+        let track_names = vec![
+            "Kick",
+            "Snare",
+            "Hi-Hat",
+            "Crash",
+            "Open Hi-Hat",
+            "Clap",
+            "Rim Shot",
+            "Tom",
+        ];
+        let sample_names = vec![
+            "kick",
+            "snare",
+            "hihat",
+            "crash",
+            "open_hihat",
+            "clap",
+            "rimshot",
+            "tom",
+        ];
+
         let mut patterns = Vec::new();
         for (track_name, sample_name) in track_names.iter().zip(sample_names.iter()) {
             let mut pattern = Pattern::new(track_name.to_string(), sample_name.to_string(), 16);
@@ -1600,7 +1841,7 @@ mod tests {
             }
             patterns.push(pattern);
         }
-        
+
         let segment = crate::timeline::TimelineSegment::new(
             "Test 8 Track Segment".to_string(),
             patterns,
@@ -1609,23 +1850,40 @@ mod tests {
             TimeSignature::four_four(),
             120.0,
         );
-        
+
         // Generate pattern preview for all 8 tracks
         let visuals = egui::Visuals::dark(); // Use dark theme for test
-        let preview_elements = timeline_view.generate_pattern_preview(&segment, 800.0, 160.0, &visuals);
-        
+        let preview_elements =
+            timeline_view.generate_pattern_preview(&segment, 800.0, 160.0, &visuals);
+
         // Should have 16 preview elements (8 tracks * 2 elements per visual element: pos + size)
-        assert_eq!(preview_elements.len(), 16, "Expected 16 preview elements for 8 tracks with active steps (2 elements per visual)");
-        
+        assert_eq!(
+            preview_elements.len(),
+            16,
+            "Expected 16 preview elements for 8 tracks with active steps (2 elements per visual)"
+        );
+
         // Verify that rim shot track (index 6) is included
-        assert!(segment.patterns.len() == 8, "Segment should have 8 patterns");
-        assert_eq!(segment.patterns[6].name, "Rim Shot", "Track 6 should be Rim Shot");
-        assert_eq!(segment.patterns[6].sample_name, "rimshot", "Rim Shot should use rimshot sample");
-        
+        assert!(
+            segment.patterns.len() == 8,
+            "Segment should have 8 patterns"
+        );
+        assert_eq!(
+            segment.patterns[6].name, "Rim Shot",
+            "Track 6 should be Rim Shot"
+        );
+        assert_eq!(
+            segment.patterns[6].sample_name, "rimshot",
+            "Rim Shot should use rimshot sample"
+        );
+
         // Test pattern height calculation accommodates all 8 tracks
         let pattern_height = 160.0 / segment.patterns.len() as f32;
-        assert_eq!(pattern_height, 20.0, "Each track should get 20px height (160px / 8 tracks)");
-        
+        assert_eq!(
+            pattern_height, 20.0,
+            "Each track should get 20px height (160px / 8 tracks)"
+        );
+
         println!("✅ All 8 tracks including Rim Shot display correctly in timeline preview");
     }
 }
